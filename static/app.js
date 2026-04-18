@@ -4,6 +4,7 @@ let networkTimer = null;
 let latestNetworkRate = null;
 let previousNetworkSample = null;
 let networkInterfaceName = "";
+const fileSamples = new Map();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -60,6 +61,21 @@ function formatMBps(bytesPerSecond) {
   return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
 }
 
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined || Number.isNaN(bytes)) {
+    return "未知";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = Number(bytes);
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const decimals = unitIndex === 0 ? 0 : 2;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
 function networkLine(recording) {
   if (recording.status !== "recording") {
     return "";
@@ -68,6 +84,26 @@ function networkLine(recording) {
     return `<p class="meta live-traffic" data-live-traffic>服务器下行：计算中</p>`;
   }
   return `<p class="meta live-traffic" data-live-traffic>服务器下行：${formatMBps(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span></p>`;
+}
+
+function fileLine(recording) {
+  if (recording.status !== "recording") {
+    return "";
+  }
+  return `<p class="meta live-file" data-file-metric="${recording.id}">录制文件：计算中</p>`;
+}
+
+function renderFileMetric(id, sample) {
+  const node = document.querySelector(`[data-file-metric="${id}"]`);
+  if (!node) {
+    return;
+  }
+  if (!sample || !sample.exists) {
+    node.textContent = "录制文件：尚未生成";
+    return;
+  }
+  const rateText = sample.rate === null ? "写入速度：计算中" : `写入速度：${formatMBps(sample.rate)}`;
+  node.textContent = `录制文件：${formatBytes(sample.size_bytes)}，${rateText}`;
 }
 
 function updateTrafficNodes() {
@@ -120,6 +156,7 @@ async function loadRecordings() {
           ${r.status === "recording" ? statusBadge("waiting") : statusBadge(r.upload_status)}
           <p class="meta">${r.live_title || "未记录标题"}</p>
           <p class="meta">${r.file_path || "未生成文件"}</p>
+          ${fileLine(r)}
           ${networkLine(r)}
           ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
@@ -149,8 +186,12 @@ function startRefreshLoop() {
     refreshTimer = setInterval(refresh, 15000);
   }
   if (!networkTimer) {
-    networkTimer = setInterval(updateNetworkRate, 5000);
+    networkTimer = setInterval(updateLiveMetrics, 5000);
   }
+}
+
+async function updateLiveMetrics() {
+  await Promise.all([updateNetworkRate(), updateRecordingFileMetrics()]);
 }
 
 async function updateNetworkRate() {
@@ -173,6 +214,35 @@ async function updateNetworkRate() {
   } catch (error) {
     console.error(error);
   }
+}
+
+async function updateRecordingFileMetrics() {
+  const nodes = [...document.querySelectorAll("[data-file-metric]")];
+  await Promise.all(
+    nodes.map(async (node) => {
+      const id = node.getAttribute("data-file-metric");
+      if (!id) {
+        return;
+      }
+      try {
+        const metric = await api(`/api/recordings/${id}/file`);
+        const now = Date.now() / 1000;
+        const previous = fileSamples.get(id);
+        let rate = null;
+        if (previous && metric.exists) {
+          const byteDelta = metric.size_bytes - previous.size_bytes;
+          const timeDelta = now - previous.timestamp;
+          rate = timeDelta > 0 ? Math.max(0, byteDelta / timeDelta) : null;
+        }
+        const sample = { ...metric, timestamp: now, rate };
+        fileSamples.set(id, sample);
+        renderFileMetric(id, sample);
+      } catch (error) {
+        node.textContent = `录制文件：读取失败`;
+        console.error(error);
+      }
+    }),
+  );
 }
 
 async function toggleStreamer(id, enabled) {
@@ -243,8 +313,8 @@ $("#streamer-form").addEventListener("submit", async (event) => {
 $("#refresh").addEventListener("click", refresh);
 
 async function boot() {
-  await updateNetworkRate();
   await refresh();
+  await updateLiveMetrics();
   startRefreshLoop();
 }
 

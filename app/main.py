@@ -165,6 +165,36 @@ def list_recordings() -> list[dict]:
         ]
 
 
+@app.get("/api/recordings/{recording_id}/file")
+def recording_file_metrics(recording_id: int) -> dict:
+    with get_db() as db:
+        row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    recording = dict(row)
+    file_path = recording.get("file_path")
+    if not file_path:
+        return {"exists": False, "size_bytes": 0, "path": None}
+
+    path = Path(file_path).resolve()
+    recordings_root = settings.recordings_dir.resolve()
+    try:
+        path.relative_to(recordings_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Refuse to stat file outside recordings directory") from exc
+
+    if not path.exists() or not path.is_file():
+        return {"exists": False, "size_bytes": 0, "path": str(path)}
+
+    stat = path.stat()
+    return {
+        "exists": True,
+        "size_bytes": stat.st_size,
+        "mtime": stat.st_mtime,
+        "path": str(path),
+    }
+
+
 @app.post("/api/recordings/{recording_id}/upload")
 def queue_upload(recording_id: int) -> dict:
     with get_db() as db:

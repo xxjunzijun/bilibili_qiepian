@@ -296,6 +296,11 @@ label {
   color: var(--ok);
 }
 
+.live-file {
+  font-weight: 700;
+  color: var(--accent);
+}
+
 .live-traffic span {
   display: inline-block;
   margin-left: 6px;
