@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime
 
 from app.config import settings
 from app.db import get_db
 from app.services.bilibili import fetch_live_status
 from app.services.commands import build_recording_path, start_recording, stop_process, upload_recording
+from app.time_utils import local_time_text
 
 
 class RecorderScheduler:
@@ -68,12 +68,13 @@ class RecorderScheduler:
                 cursor = db.execute(
                     """
                     INSERT INTO recordings
-                        (streamer_id, status, live_title, file_path, upload_title, process_id)
-                    VALUES (?, 'recording', ?, ?, ?, ?)
+                        (streamer_id, status, live_title, started_at, file_path, upload_title, upload_status, process_id)
+                    VALUES (?, 'recording', ?, ?, ?, ?, 'waiting', ?)
                     """,
                     (
                         streamer["id"],
                         live.title,
+                        local_time_text(),
                         str(output),
                         streamer["title_template"],
                         process.pid,
@@ -94,7 +95,7 @@ class RecorderScheduler:
                     SET status = 'finished', ended_at = ?, upload_status = ?
                     WHERE id = ?
                     """,
-                    (datetime.now().isoformat(timespec="seconds"), next_upload_status, active["id"]),
+                    (local_time_text(), next_upload_status, active["id"]),
                 )
 
     def _check_finished_uploads(self) -> None:

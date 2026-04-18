@@ -24,6 +24,29 @@ function badge(value) {
   return `<span class="badge ${cls}">${value}</span>`;
 }
 
+function statusText(value) {
+  const labels = {
+    recording: "录制中",
+    finished: "录制完成",
+    not_started: "未开始投稿",
+    waiting: "等待下播",
+    pending: "等待投稿",
+    uploading: "投稿中",
+    uploaded: "已投稿",
+    failed: "投稿失败",
+    skipped: "不自动投稿",
+    enabled: "已启用",
+    disabled: "已暂停",
+    auto_upload: "自动投稿",
+    manual_upload: "只录制",
+  };
+  return labels[value] || value;
+}
+
+function statusBadge(value) {
+  return badge(statusText(value));
+}
+
 function setStatusMessage(id, message) {
   const node = document.querySelector(`[data-status-for="${id}"]`);
   if (node) {
@@ -39,7 +62,7 @@ async function loadStreamers() {
         (s) => `
         <article class="card">
           <h3>${s.name}</h3>
-          <div>${badge(s.enabled ? "enabled" : "disabled")} ${badge(s.auto_upload ? "auto_upload" : "manual_upload")}</div>
+          <div>${statusBadge(s.enabled ? "enabled" : "disabled")} ${statusBadge(s.auto_upload ? "auto_upload" : "manual_upload")}</div>
           <p class="meta">房间号：${s.room_id}</p>
           <p class="meta">清晰度：${s.quality || "best"}</p>
           <p class="meta">标签：${s.tags}</p>
@@ -64,7 +87,8 @@ async function loadRecordings() {
         (r) => `
         <article class="recording">
           <strong>${r.streamer_name}</strong>
-          ${badge(r.status)} ${badge(r.upload_status)}
+          ${statusBadge(r.status)}
+          ${r.status === "recording" ? statusBadge("waiting") : statusBadge(r.upload_status)}
           <p class="meta">${r.live_title || "未记录标题"}</p>
           <p class="meta">${r.file_path || "未生成文件"}</p>
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
