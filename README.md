@@ -174,6 +174,16 @@ UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --t
 
 如果暂时只想录制、不想自动投稿，可以把 `.env` 里的 `UPLOAD_COMMAND` 留空。
 
+### 4. 录制清晰度
+
+`.env` 里的录制命令默认使用主播配置里的清晰度：
+
+```text
+RECORD_COMMAND=streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -o "{output}"
+```
+
+`{quality}` 会由后台添加主播时选择的清晰度替换，例如 `best`、`1080p`、`720p`。
+
 ## 使用后台
 
 打开：
@@ -187,6 +197,7 @@ http://服务器IP:8787
 ```text
 主播名称
 B站直播间链接或房间号
+录制清晰度
 ```
 
 例如：
@@ -194,7 +205,20 @@ B站直播间链接或房间号
 ```text
 主播名称：某某主播
 B站直播间：https://live.bilibili.com/123456
+录制清晰度：最高可用 best
 ```
+
+清晰度可以选择：
+
+```text
+best     最高可用清晰度，文件最大
+1080p    优先录 1080p
+720p     更省空间
+480p     文件更小
+worst    最低可用清晰度
+```
+
+不同直播间实际可用的清晰度由 B站和 `streamlink` 返回结果决定。如果选择的清晰度不可用，可以改成 `best` 或 `720p` 再试。
 
 勾选“下播后自动投稿”后：
 
@@ -222,6 +246,8 @@ B站直播间：https://live.bilibili.com/123456
 {title}      直播间标题
 {url}        直播间地址
 ```
+
+“最近录制”里可以删除已结束的录制记录。删除时会同时删除本地视频文件；正在录制中的任务不能删除。
 
 ## 部署方式二：原生 Python + systemd
 

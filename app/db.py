@@ -34,6 +34,7 @@ def init_db() -> None:
                 name TEXT NOT NULL,
                 room_id TEXT NOT NULL,
                 url TEXT NOT NULL,
+                quality TEXT NOT NULL DEFAULT 'best',
                 enabled INTEGER NOT NULL DEFAULT 1,
                 auto_upload INTEGER NOT NULL DEFAULT 1,
                 tid INTEGER NOT NULL DEFAULT 171,
@@ -61,3 +62,10 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_column(db, "streamers", "quality", "TEXT NOT NULL DEFAULT 'best'")
+
+
+def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

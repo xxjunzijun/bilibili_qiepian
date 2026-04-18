@@ -28,6 +28,7 @@ def start_recording(streamer: dict, output: Path) -> subprocess.Popen:
             "output": str(output),
             "streamer_name": streamer["name"],
             "room_id": streamer["room_id"],
+            "quality": streamer.get("quality") or "best",
         },
     )
     kwargs = {

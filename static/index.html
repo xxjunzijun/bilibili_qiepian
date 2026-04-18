@@ -57,6 +57,18 @@
                   <small>可以填完整链接，也可以只填房间号。</small>
                   <input name="room_id" placeholder="例如：https://live.bilibili.com/123456" required />
                 </label>
+
+                <label class="field">
+                  <span>录制清晰度</span>
+                  <small>best 会录最高可用清晰度；想省空间可以选 720p。</small>
+                  <select name="quality">
+                    <option value="best" selected>最高可用 best</option>
+                    <option value="1080p">1080p</option>
+                    <option value="720p">720p</option>
+                    <option value="480p">480p</option>
+                    <option value="worst">最低可用 worst</option>
+                  </select>
+                </label>
               </div>
 
               <label class="check-row">
@@ -127,6 +139,6 @@
       </section>
       </div>
     </main>
-    <script src="/app.js?v=20260418-layout-clean"></script>
+    <script src="/app.js?v=20260418-quality-delete"></script>
   </body>
 </html>

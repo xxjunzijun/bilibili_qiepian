@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from app.config import BASE_DIR
+from app.config import BASE_DIR, settings
 from app.db import get_db, init_db
 from app.schemas import StreamerIn, StreamerPatch
 from app.services.bilibili import fetch_live_status, normalize_room_id, room_url
@@ -42,13 +44,14 @@ def create_streamer(payload: StreamerIn) -> dict:
         cursor = db.execute(
             """
             INSERT INTO streamers
-                (name, room_id, url, enabled, auto_upload, tid, tags, title_template, description_template)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (name, room_id, url, quality, enabled, auto_upload, tid, tags, title_template, description_template)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.name,
                 room_id,
                 url,
+                payload.quality,
                 int(payload.enabled),
                 int(payload.auto_upload),
                 payload.tid,
@@ -94,6 +97,33 @@ def delete_streamer(streamer_id: int) -> dict:
     with get_db() as db:
         db.execute("DELETE FROM streamers WHERE id = ?", (streamer_id,))
     return {"ok": True}
+
+
+@app.delete("/api/recordings/{recording_id}")
+def delete_recording(recording_id: int, delete_file: bool = True) -> dict:
+    with get_db() as db:
+        row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        recording = dict(row)
+        if recording["status"] == "recording":
+            raise HTTPException(status_code=400, detail="Recording is still running")
+
+        deleted_file = False
+        file_path = recording.get("file_path")
+        if delete_file and file_path:
+            path = Path(file_path).resolve()
+            recordings_root = settings.recordings_dir.resolve()
+            try:
+                path.relative_to(recordings_root)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Refuse to delete file outside recordings directory") from exc
+            if path.exists() and path.is_file():
+                path.unlink()
+                deleted_file = True
+
+        db.execute("DELETE FROM recordings WHERE id = ?", (recording_id,))
+    return {"ok": True, "deleted_file": deleted_file}
 
 
 @app.get("/api/streamers/{streamer_id}/status")

@@ -41,6 +41,7 @@ async function loadStreamers() {
           <h3>${s.name}</h3>
           <div>${badge(s.enabled ? "enabled" : "disabled")} ${badge(s.auto_upload ? "auto_upload" : "manual_upload")}</div>
           <p class="meta">房间号：${s.room_id}</p>
+          <p class="meta">清晰度：${s.quality || "best"}</p>
           <p class="meta">标签：${s.tags}</p>
           <p class="meta">标题：${s.title_template}</p>
           <p class="meta" data-status-for="${s.id}"></p>
@@ -70,6 +71,7 @@ async function loadRecordings() {
           ${r.upload_error ? `<p class="meta">发布输出：${r.upload_error}</p>` : ""}
           <div class="actions">
             ${r.status === "finished" ? `<button class="secondary" onclick="queueUpload(${r.id})">加入投稿队列</button>` : ""}
+            ${r.status !== "recording" ? `<button class="danger" onclick="deleteRecording(${r.id})">删除记录和文件</button>` : ""}
           </div>
         </article>
       `,
@@ -127,6 +129,12 @@ async function queueUpload(id) {
   refresh();
 }
 
+async function deleteRecording(id) {
+  if (!confirm("确定删除这条录制记录和本地视频文件？这个操作不可恢复。")) return;
+  await api(`/api/recordings/${id}?delete_file=true`, { method: "DELETE" });
+  refresh();
+}
+
 $("#streamer-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const formElement = event.currentTarget;
@@ -135,6 +143,7 @@ $("#streamer-form").addEventListener("submit", async (event) => {
   payload.auto_upload = form.get("auto_upload") === "on";
   payload.enabled = true;
   payload.tid = Number(payload.tid || 171);
+  payload.quality = payload.quality || "best";
   $("#streamer-message").textContent = "正在添加主播...";
   $("#add-streamer-button").disabled = true;
   try {
