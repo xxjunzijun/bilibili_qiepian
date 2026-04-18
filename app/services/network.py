@@ -3,6 +3,19 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from app.config import settings
+
+
+def _default_route_interface() -> str | None:
+    route_file = Path("/proc/net/route")
+    if not route_file.exists():
+        return None
+    for line in route_file.read_text(encoding="utf-8").splitlines()[1:]:
+        fields = line.split()
+        if len(fields) >= 2 and fields[1] == "00000000":
+            return fields[0]
+    return None
+
 
 def read_network_rx_bytes() -> dict:
     proc_net_dev = Path("/proc/net/dev")
@@ -11,11 +24,16 @@ def read_network_rx_bytes() -> dict:
             "supported": False,
             "rx_bytes": 0,
             "timestamp": time.time(),
+            "interface": None,
             "interfaces": [],
+            "reason": "/proc/net/dev not found",
         }
 
+    configured_interface = settings.network_interface
+    selected_interface = configured_interface or _default_route_interface()
     rx_bytes = 0
     interfaces = []
+    found_selected = False
     for line in proc_net_dev.read_text(encoding="utf-8").splitlines()[2:]:
         if ":" not in line:
             continue
@@ -27,12 +45,28 @@ def read_network_rx_bytes() -> dict:
         if not fields:
             continue
         received = int(fields[0])
-        rx_bytes += received
         interfaces.append({"name": interface, "rx_bytes": received})
+        if selected_interface:
+            if interface == selected_interface:
+                rx_bytes = received
+                found_selected = True
+        else:
+            rx_bytes += received
+
+    if selected_interface and not found_selected:
+        return {
+            "supported": False,
+            "rx_bytes": 0,
+            "timestamp": time.time(),
+            "interface": selected_interface,
+            "interfaces": interfaces,
+            "reason": f"interface {selected_interface} not found",
+        }
 
     return {
         "supported": True,
         "rx_bytes": rx_bytes,
         "timestamp": time.time(),
+        "interface": selected_interface,
         "interfaces": interfaces,
     }

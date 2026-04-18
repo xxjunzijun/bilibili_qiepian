@@ -3,6 +3,7 @@ let refreshTimer = null;
 let networkTimer = null;
 let latestNetworkRate = null;
 let previousNetworkSample = null;
+let networkInterfaceName = "";
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -66,12 +67,12 @@ function networkLine(recording) {
   if (latestNetworkRate === null) {
     return `<p class="meta live-traffic" data-live-traffic>服务器下行：计算中</p>`;
   }
-  return `<p class="meta live-traffic" data-live-traffic>服务器下行：${formatMBps(latestNetworkRate)} <span>包含服务器所有网卡流量</span></p>`;
+  return `<p class="meta live-traffic" data-live-traffic>服务器下行：${formatMBps(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span></p>`;
 }
 
 function updateTrafficNodes() {
   document.querySelectorAll("[data-live-traffic]").forEach((node) => {
-    node.innerHTML = `服务器下行：${formatMBps(latestNetworkRate)} <span>包含服务器所有网卡流量</span>`;
+    node.innerHTML = `服务器下行：${formatMBps(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span>`;
   });
 }
 
@@ -157,8 +158,11 @@ async function updateNetworkRate() {
     const sample = await api("/api/metrics/network");
     if (!sample.supported) {
       latestNetworkRate = null;
+      networkInterfaceName = sample.interface ? `网卡 ${sample.interface} 不可用` : "不支持当前系统";
+      updateTrafficNodes();
       return;
     }
+    networkInterfaceName = sample.interface ? `网卡 ${sample.interface}` : "所有非 lo 网卡";
     if (previousNetworkSample) {
       const byteDelta = sample.rx_bytes - previousNetworkSample.rx_bytes;
       const timeDelta = sample.timestamp - previousNetworkSample.timestamp;

@@ -13,6 +13,7 @@ class Settings:
     data_dir: Path = Path(os.getenv("APP_DATA_DIR", str(BASE_DIR / "data"))).resolve()
     recordings_dir: Path = Path(os.getenv("APP_RECORDINGS_DIR", str(BASE_DIR / "recordings"))).resolve()
     check_interval_seconds: int = int(os.getenv("APP_CHECK_INTERVAL_SECONDS", "60"))
+    network_interface: str = os.getenv("APP_NETWORK_INTERFACE", "").strip()
     record_command: str = os.getenv(
         "RECORD_COMMAND",
         'streamlink --retry-streams 60 --retry-max 3 "{url}" best -o "{output}"',
