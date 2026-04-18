@@ -20,7 +20,8 @@ def build_recording_path(streamer_name: str) -> Path:
     return directory / f"{datetime.now():%Y%m%d_%H%M%S}.ts"
 
 
-def start_recording(streamer: dict, output: Path) -> subprocess.Popen:
+def start_recording(streamer: dict, output: Path) -> tuple[subprocess.Popen, Path]:
+    log_path = output.with_suffix(".log")
     command = _format(
         settings.record_command,
         {
@@ -31,9 +32,12 @@ def start_recording(streamer: dict, output: Path) -> subprocess.Popen:
             "quality": streamer.get("quality") or "best",
         },
     )
+    log_file = log_path.open("a", encoding="utf-8")
+    log_file.write(f"[qiepian] command: {command}\n")
+    log_file.flush()
     kwargs = {
         "shell": True,
-        "stdout": subprocess.PIPE,
+        "stdout": log_file,
         "stderr": subprocess.STDOUT,
         "text": True,
     }
@@ -41,7 +45,9 @@ def start_recording(streamer: dict, output: Path) -> subprocess.Popen:
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         kwargs["preexec_fn"] = os.setsid
-    return subprocess.Popen(command, **kwargs)
+    process = subprocess.Popen(command, **kwargs)
+    process._qiepian_log_file = log_file  # type: ignore[attr-defined]
+    return process, log_path
 
 
 def stop_process(process: subprocess.Popen, timeout: int = 30) -> None:
@@ -54,6 +60,12 @@ def stop_process(process: subprocess.Popen, timeout: int = 30) -> None:
     except Exception:
         try:
             process.kill()
+        except Exception:
+            pass
+    log_file = getattr(process, "_qiepian_log_file", None)
+    if log_file:
+        try:
+            log_file.close()
         except Exception:
             pass
 

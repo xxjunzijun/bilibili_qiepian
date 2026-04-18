@@ -53,6 +53,7 @@ def init_db() -> None:
                 started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 ended_at TEXT,
                 file_path TEXT,
+                log_path TEXT,
                 upload_title TEXT,
                 upload_status TEXT NOT NULL DEFAULT 'not_started',
                 upload_error TEXT,
@@ -63,6 +64,7 @@ def init_db() -> None:
             """
         )
         _ensure_column(db, "streamers", "quality", "TEXT NOT NULL DEFAULT 'best'")
+        _ensure_column(db, "recordings", "log_path", "TEXT")
 
 
 def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:

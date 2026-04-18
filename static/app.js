@@ -28,6 +28,8 @@ function statusText(value) {
   const labels = {
     recording: "录制中",
     finished: "录制完成",
+    interrupted: "录制中断",
+    recording_failed: "录制失败",
     not_started: "未开始投稿",
     waiting: "等待下播",
     pending: "等待投稿",
@@ -91,7 +93,9 @@ async function loadRecordings() {
           ${r.status === "recording" ? statusBadge("waiting") : statusBadge(r.upload_status)}
           <p class="meta">${r.live_title || "未记录标题"}</p>
           <p class="meta">${r.file_path || "未生成文件"}</p>
+          ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
+          ${r.error ? `<p class="meta">录制错误：${r.error}</p>` : ""}
           ${r.upload_error ? `<p class="meta">发布输出：${r.upload_error}</p>` : ""}
           <div class="actions">
             ${r.status === "finished" ? `<button class="secondary" onclick="queueUpload(${r.id})">加入投稿队列</button>` : ""}

@@ -39,6 +39,7 @@ class RecorderScheduler:
             self._stop.wait(settings.check_interval_seconds)
 
     def tick(self) -> None:
+        self._sync_recording_processes()
         with get_db() as db:
             streamers = [dict(row) for row in db.execute("SELECT * FROM streamers WHERE enabled = 1")]
 
@@ -63,19 +64,20 @@ class RecorderScheduler:
 
         if live.is_live and not active:
             output = build_recording_path(streamer["name"])
-            process = start_recording(streamer, output)
+            process, log_path = start_recording(streamer, output)
             with get_db() as db:
                 cursor = db.execute(
                     """
                     INSERT INTO recordings
-                        (streamer_id, status, live_title, started_at, file_path, upload_title, upload_status, process_id)
-                    VALUES (?, 'recording', ?, ?, ?, ?, 'waiting', ?)
+                        (streamer_id, status, live_title, started_at, file_path, log_path, upload_title, upload_status, process_id)
+                    VALUES (?, 'recording', ?, ?, ?, ?, ?, 'waiting', ?)
                     """,
                     (
                         streamer["id"],
                         live.title,
                         local_time_text(),
                         str(output),
+                        str(log_path),
                         streamer["title_template"],
                         process.pid,
                     ),
@@ -97,6 +99,53 @@ class RecorderScheduler:
                     """,
                     (local_time_text(), next_upload_status, active["id"]),
                 )
+
+    def _sync_recording_processes(self) -> None:
+        with get_db() as db:
+            active = [dict(row) for row in db.execute("SELECT * FROM recordings WHERE status = 'recording'")]
+
+        for recording in active:
+            process = self._processes.get(recording["id"])
+            if not process:
+                with get_db() as db:
+                    db.execute(
+                        """
+                        UPDATE recordings
+                        SET status = 'interrupted', ended_at = ?, upload_status = 'skipped',
+                            error = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            local_time_text(),
+                            "录制进程不在当前服务内存中，可能是服务重启或进程异常退出。",
+                            recording["id"],
+                        ),
+                    )
+                continue
+
+            return_code = process.poll()
+            if return_code is not None:
+                self._processes.pop(recording["id"], None)
+                log_file = getattr(process, "_qiepian_log_file", None)
+                if log_file:
+                    try:
+                        log_file.close()
+                    except Exception:
+                        pass
+                with get_db() as db:
+                    db.execute(
+                        """
+                        UPDATE recordings
+                        SET status = 'recording_failed', ended_at = ?, upload_status = 'skipped',
+                            error = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            local_time_text(),
+                            f"streamlink 进程已退出，退出码：{return_code}。请查看录制日志。",
+                            recording["id"],
+                        ),
+                    )
 
     def _check_finished_uploads(self) -> None:
         with get_db() as db:

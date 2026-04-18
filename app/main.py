@@ -110,17 +110,19 @@ def delete_recording(recording_id: int, delete_file: bool = True) -> dict:
             raise HTTPException(status_code=400, detail="Recording is still running")
 
         deleted_file = False
-        file_path = recording.get("file_path")
-        if delete_file and file_path:
-            path = Path(file_path).resolve()
-            recordings_root = settings.recordings_dir.resolve()
-            try:
-                path.relative_to(recordings_root)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail="Refuse to delete file outside recordings directory") from exc
-            if path.exists() and path.is_file():
-                path.unlink()
-                deleted_file = True
+        if delete_file:
+            for path_text in (recording.get("file_path"), recording.get("log_path")):
+                if not path_text:
+                    continue
+                path = Path(path_text).resolve()
+                recordings_root = settings.recordings_dir.resolve()
+                try:
+                    path.relative_to(recordings_root)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="Refuse to delete file outside recordings directory") from exc
+                if path.exists() and path.is_file():
+                    path.unlink()
+                    deleted_file = True
 
         db.execute("DELETE FROM recordings WHERE id = ?", (recording_id,))
     return {"ok": True, "deleted_file": deleted_file}
