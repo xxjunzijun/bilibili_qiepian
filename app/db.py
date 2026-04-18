@@ -58,6 +58,7 @@ def init_db() -> None:
                 upload_status TEXT NOT NULL DEFAULT 'not_started',
                 upload_error TEXT,
                 process_id INTEGER,
+                status_check_error TEXT,
                 error TEXT,
                 FOREIGN KEY(streamer_id) REFERENCES streamers(id) ON DELETE CASCADE
             );
@@ -65,6 +66,7 @@ def init_db() -> None:
         )
         _ensure_column(db, "streamers", "quality", "TEXT NOT NULL DEFAULT 'best'")
         _ensure_column(db, "recordings", "log_path", "TEXT")
+        _ensure_column(db, "recordings", "status_check_error", "TEXT")
 
 
 def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:

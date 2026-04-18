@@ -160,6 +160,7 @@ async function loadRecordings() {
           ${networkLine(r)}
           ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
+          ${r.status_check_error ? `<p class="meta status-check-error">状态检查异常：${r.status_check_error}</p>` : ""}
           ${r.error ? `<p class="meta">录制错误：${r.error}</p>` : ""}
           ${r.upload_error ? `<p class="meta">发布输出：${r.upload_error}</p>` : ""}
           <div class="actions">

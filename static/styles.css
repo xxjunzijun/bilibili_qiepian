@@ -301,6 +301,10 @@ label {
   color: var(--accent);
 }
 
+.status-check-error {
+  color: #9a6b00;
+}
+
 .live-traffic span {
   display: inline-block;
   margin-left: 6px;

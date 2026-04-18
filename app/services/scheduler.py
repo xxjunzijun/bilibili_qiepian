@@ -59,8 +59,15 @@ class RecorderScheduler:
         except Exception as exc:
             if active:
                 with get_db() as db:
-                    db.execute("UPDATE recordings SET error = ? WHERE id = ?", (str(exc), active["id"]))
+                    db.execute(
+                        "UPDATE recordings SET status_check_error = ? WHERE id = ?",
+                        (str(exc), active["id"]),
+                    )
             return
+
+        if active and active["status_check_error"]:
+            with get_db() as db:
+                db.execute("UPDATE recordings SET status_check_error = NULL WHERE id = ?", (active["id"],))
 
         if live.is_live and not active:
             output = build_recording_path(streamer["name"])
@@ -69,8 +76,8 @@ class RecorderScheduler:
                 cursor = db.execute(
                     """
                     INSERT INTO recordings
-                        (streamer_id, status, live_title, started_at, file_path, log_path, upload_title, upload_status, process_id)
-                    VALUES (?, 'recording', ?, ?, ?, ?, ?, 'waiting', ?)
+                        (streamer_id, status, live_title, started_at, file_path, log_path, upload_title, upload_status, status_check_error, process_id)
+                    VALUES (?, 'recording', ?, ?, ?, ?, ?, 'waiting', NULL, ?)
                     """,
                     (
                         streamer["id"],
