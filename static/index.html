@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>切片录播后台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">B站直播录播</p>
+          <h1>主播开播后自动录制，下播后自动投稿</h1>
+          <p class="intro">添加 B站直播间后，系统会定时检查开播状态。开播自动录制，下播后按设置进入投稿队列。</p>
+        </div>
+        <div class="header-actions">
+          <button id="refresh">刷新</button>
+        </div>
+      </header>
+
+      <div id="dashboard">
+        <section class="status-strip">
+          <article>
+            <strong>录制目录</strong>
+            <span>./recordings</span>
+          </article>
+          <article>
+            <strong>检查间隔</strong>
+            <span>默认 60 秒</span>
+          </article>
+          <article>
+            <strong>投稿工具</strong>
+            <span>biliup</span>
+          </article>
+        </section>
+
+        <section class="layout">
+          <section class="panel form-panel">
+            <div class="section-heading">
+              <div>
+                <h2>添加主播</h2>
+                <p>先填基础信息，投稿设置可以保持默认。</p>
+              </div>
+            </div>
+
+            <form id="streamer-form">
+              <div class="form-grid">
+                <label class="field">
+                  <span>主播名称</span>
+                  <small>后台显示用，也会用于默认投稿标题。</small>
+                  <input name="name" placeholder="例如：某某主播" required />
+                </label>
+
+                <label class="field">
+                  <span>B站直播间</span>
+                  <small>可以填完整链接，也可以只填房间号。</small>
+                  <input name="room_id" placeholder="例如：https://live.bilibili.com/123456" required />
+                </label>
+              </div>
+
+              <label class="check-row">
+                <input name="auto_upload" type="checkbox" checked />
+                <span>
+                  <strong>下播后自动投稿</strong>
+                  <small>录制结束后自动加入 B站投稿队列。关闭后只保存本地文件。</small>
+                </span>
+              </label>
+
+              <details class="advanced">
+                <summary>投稿设置</summary>
+                <div class="advanced-grid">
+                  <label class="field">
+                    <span>投稿分区 tid</span>
+                    <small>B站投稿分区 ID。默认 171。</small>
+                    <input name="tid" type="number" value="171" />
+                  </label>
+
+                  <label class="field">
+                    <span>投稿标签</span>
+                    <small>多个标签用英文逗号分隔。</small>
+                    <input name="tags" value="直播录像,B站录播" />
+                  </label>
+
+                  <label class="field full">
+                    <span>标题模板</span>
+                    <small>可用 {streamer}、{date}、{title}。</small>
+                    <input name="title_template" value="{streamer} 直播录像 {date}" />
+                  </label>
+
+                  <label class="field full">
+                    <span>简介模板</span>
+                    <small>可用 {streamer}、{date}、{title}、{url}。</small>
+                    <textarea name="description_template">自动录制的直播录像
+主播：{streamer}
+直播间：{url}</textarea>
+                  </label>
+                </div>
+              </details>
+
+              <div class="form-actions">
+                <button id="add-streamer-button" type="submit">添加主播</button>
+                <p id="streamer-message" class="meta"></p>
+              </div>
+            </form>
+          </section>
+
+          <aside class="panel publish-panel">
+            <h2>自动发布</h2>
+            <p>服务器先完成一次 biliup 登录，生成 ./data/cookies.json。</p>
+            <p>录制结束后，系统会把文件、标题、简介、标签和分区交给 biliup 投稿。</p>
+          </aside>
+        </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>主播列表</h2>
+        </div>
+        <div id="streamers" class="grid"></div>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>最近录制</h2>
+        </div>
+        <div id="recordings" class="list"></div>
+      </section>
+      </div>
+    </main>
+    <script src="/app.js?v=20260418-layout-clean"></script>
+  </body>
+</html>
