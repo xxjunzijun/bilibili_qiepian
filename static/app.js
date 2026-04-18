@@ -1,5 +1,8 @@
 const $ = (selector) => document.querySelector(selector);
 let refreshTimer = null;
+let networkTimer = null;
+let latestNetworkRate = null;
+let previousNetworkSample = null;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -49,6 +52,29 @@ function statusBadge(value) {
   return badge(statusText(value));
 }
 
+function formatMBps(bytesPerSecond) {
+  if (bytesPerSecond === null || Number.isNaN(bytesPerSecond)) {
+    return "计算中";
+  }
+  return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
+}
+
+function networkLine(recording) {
+  if (recording.status !== "recording") {
+    return "";
+  }
+  if (latestNetworkRate === null) {
+    return `<p class="meta live-traffic" data-live-traffic>服务器下行：计算中</p>`;
+  }
+  return `<p class="meta live-traffic" data-live-traffic>服务器下行：${formatMBps(latestNetworkRate)} <span>包含服务器所有网卡流量</span></p>`;
+}
+
+function updateTrafficNodes() {
+  document.querySelectorAll("[data-live-traffic]").forEach((node) => {
+    node.innerHTML = `服务器下行：${formatMBps(latestNetworkRate)} <span>包含服务器所有网卡流量</span>`;
+  });
+}
+
 function setStatusMessage(id, message) {
   const node = document.querySelector(`[data-status-for="${id}"]`);
   if (node) {
@@ -93,6 +119,7 @@ async function loadRecordings() {
           ${r.status === "recording" ? statusBadge("waiting") : statusBadge(r.upload_status)}
           <p class="meta">${r.live_title || "未记录标题"}</p>
           <p class="meta">${r.file_path || "未生成文件"}</p>
+          ${networkLine(r)}
           ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
           ${r.error ? `<p class="meta">录制错误：${r.error}</p>` : ""}
@@ -119,6 +146,28 @@ async function refresh() {
 function startRefreshLoop() {
   if (!refreshTimer) {
     refreshTimer = setInterval(refresh, 15000);
+  }
+  if (!networkTimer) {
+    networkTimer = setInterval(updateNetworkRate, 5000);
+  }
+}
+
+async function updateNetworkRate() {
+  try {
+    const sample = await api("/api/metrics/network");
+    if (!sample.supported) {
+      latestNetworkRate = null;
+      return;
+    }
+    if (previousNetworkSample) {
+      const byteDelta = sample.rx_bytes - previousNetworkSample.rx_bytes;
+      const timeDelta = sample.timestamp - previousNetworkSample.timestamp;
+      latestNetworkRate = timeDelta > 0 ? Math.max(0, byteDelta / timeDelta) : null;
+      updateTrafficNodes();
+    }
+    previousNetworkSample = sample;
+  } catch (error) {
+    console.error(error);
   }
 }
 
@@ -190,6 +239,7 @@ $("#streamer-form").addEventListener("submit", async (event) => {
 $("#refresh").addEventListener("click", refresh);
 
 async function boot() {
+  await updateNetworkRate();
   await refresh();
   startRefreshLoop();
 }

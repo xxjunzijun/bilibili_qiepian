@@ -9,6 +9,7 @@ from app.config import BASE_DIR, settings
 from app.db import get_db, init_db
 from app.schemas import StreamerIn, StreamerPatch
 from app.services.bilibili import fetch_live_status, normalize_room_id, room_url
+from app.services.network import read_network_rx_bytes
 from app.services.scheduler import scheduler
 
 app = FastAPI(title="Qiepian Live Recorder")
@@ -28,6 +29,11 @@ def on_shutdown() -> None:
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True}
+
+
+@app.get("/api/metrics/network")
+def network_metrics() -> dict:
+    return read_network_rx_bytes()
 
 
 @app.get("/api/streamers")

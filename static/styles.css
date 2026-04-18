@@ -291,6 +291,18 @@ label {
   overflow-wrap: anywhere;
 }
 
+.live-traffic {
+  font-weight: 700;
+  color: var(--ok);
+}
+
+.live-traffic span {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .actions {
   display: flex;
   gap: 8px;
