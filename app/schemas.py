@@ -8,6 +8,7 @@ class StreamerIn(BaseModel):
     room_id: str = Field(min_length=1)
     url: str | None = None
     quality: str = "best"
+    segment_hours: int = 0
     enabled: bool = True
     auto_upload: bool = True
     tid: int = 171
@@ -21,6 +22,7 @@ class StreamerPatch(BaseModel):
     room_id: str | None = None
     url: str | None = None
     quality: str | None = None
+    segment_hours: int | None = None
     enabled: bool | None = None
     auto_upload: bool | None = None
     tid: int | None = None

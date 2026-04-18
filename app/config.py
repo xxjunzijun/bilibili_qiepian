@@ -16,11 +16,11 @@ class Settings:
     network_interface: str = os.getenv("APP_NETWORK_INTERFACE", "").strip()
     record_command: str = os.getenv(
         "RECORD_COMMAND",
-        'streamlink --retry-streams 60 --retry-max 3 "{url}" best -o "{output}"',
+        'streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -o "{output}"',
     )
     upload_command: str = os.getenv(
         "UPLOAD_COMMAND",
-        'biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" "{file}"',
+        'biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}',
     )
 
     @property

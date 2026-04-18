@@ -158,13 +158,14 @@ docker compose exec qiepian biliup --user-cookie /app/data/cookies.json upload \
 `.env` 里默认的投稿命令是：
 
 ```text
-UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" "{file}"
+UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}
 ```
 
 录制结束后，服务会自动替换这些变量：
 
 ```text
 {file}          录制文件路径
+{files}         所有分段文件路径，用于分 P 投稿
 {title}         投稿标题
 {description}   投稿简介
 {tags}          投稿标签
@@ -184,6 +185,8 @@ RECORD_COMMAND=streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -
 
 `{quality}` 会由后台添加主播时选择的清晰度替换，例如 `best`、`1080p`、`720p`。
 
+如果开启录制分段，下播后 `{files}` 会包含所有分段文件，`biliup` 会把它们作为同一个稿件的多 P 上传。老配置如果还在使用 `"{file}"`，只会稳定上传第一个文件，建议更新为 `{files}`。
+
 ## 使用后台
 
 打开：
@@ -198,6 +201,7 @@ http://服务器IP:8787
 主播名称
 B站直播间链接或房间号
 录制清晰度
+录制分段
 ```
 
 例如：
@@ -206,6 +210,7 @@ B站直播间链接或房间号
 主播名称：某某主播
 B站直播间：https://live.bilibili.com/123456
 录制清晰度：最高可用 best
+录制分段：每 2 小时一段
 ```
 
 清晰度可以选择：

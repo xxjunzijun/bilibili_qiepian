@@ -35,6 +35,7 @@ def init_db() -> None:
                 room_id TEXT NOT NULL,
                 url TEXT NOT NULL,
                 quality TEXT NOT NULL DEFAULT 'best',
+                segment_hours INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 auto_upload INTEGER NOT NULL DEFAULT 1,
                 tid INTEGER NOT NULL DEFAULT 171,
@@ -54,6 +55,13 @@ def init_db() -> None:
                 ended_at TEXT,
                 file_path TEXT,
                 log_path TEXT,
+                current_file_path TEXT,
+                current_log_path TEXT,
+                current_segment_started_at TEXT,
+                current_segment_index INTEGER NOT NULL DEFAULT 1,
+                segment_hours INTEGER NOT NULL DEFAULT 0,
+                segment_paths TEXT,
+                segment_log_paths TEXT,
                 upload_title TEXT,
                 upload_status TEXT NOT NULL DEFAULT 'not_started',
                 upload_error TEXT,
@@ -65,8 +73,16 @@ def init_db() -> None:
             """
         )
         _ensure_column(db, "streamers", "quality", "TEXT NOT NULL DEFAULT 'best'")
+        _ensure_column(db, "streamers", "segment_hours", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(db, "recordings", "log_path", "TEXT")
         _ensure_column(db, "recordings", "status_check_error", "TEXT")
+        _ensure_column(db, "recordings", "current_file_path", "TEXT")
+        _ensure_column(db, "recordings", "current_log_path", "TEXT")
+        _ensure_column(db, "recordings", "current_segment_started_at", "TEXT")
+        _ensure_column(db, "recordings", "current_segment_index", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(db, "recordings", "segment_hours", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(db, "recordings", "segment_paths", "TEXT")
+        _ensure_column(db, "recordings", "segment_log_paths", "TEXT")
 
 
 def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:

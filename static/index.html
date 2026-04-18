@@ -69,6 +69,17 @@
                     <option value="worst">最低可用 worst</option>
                   </select>
                 </label>
+
+                <label class="field">
+                  <span>录制分段</span>
+                  <small>下播后会把所有分段作为同一个稿件的分 P 上传。</small>
+                  <select name="segment_hours">
+                    <option value="0" selected>不分段</option>
+                    <option value="1">每 1 小时一段</option>
+                    <option value="2">每 2 小时一段</option>
+                    <option value="3">每 3 小时一段</option>
+                  </select>
+                </label>
               </div>
 
               <label class="check-row">
@@ -139,6 +150,6 @@
       </section>
       </div>
     </main>
-    <script src="/app.js?v=20260418-status-check-error"></script>
+    <script src="/app.js?v=20260418-segments"></script>
   </body>
 </html>

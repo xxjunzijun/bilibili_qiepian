@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
+from datetime import datetime
 
 from app.config import settings
 from app.db import get_db
@@ -70,26 +72,43 @@ class RecorderScheduler:
                 db.execute("UPDATE recordings SET status_check_error = NULL WHERE id = ?", (active["id"],))
 
         if live.is_live and not active:
-            output = build_recording_path(streamer["name"])
+            output = build_recording_path(streamer["name"], 1)
             process, log_path = start_recording(streamer, output)
+            now = local_time_text()
             with get_db() as db:
                 cursor = db.execute(
                     """
                     INSERT INTO recordings
-                        (streamer_id, status, live_title, started_at, file_path, log_path, upload_title, upload_status, status_check_error, process_id)
-                    VALUES (?, 'recording', ?, ?, ?, ?, ?, 'waiting', NULL, ?)
+                        (
+                            streamer_id, status, live_title, started_at,
+                            file_path, log_path, current_file_path, current_log_path,
+                            current_segment_started_at, current_segment_index, segment_hours,
+                            segment_paths, segment_log_paths, upload_title,
+                            upload_status, status_check_error, process_id
+                        )
+                    VALUES (?, 'recording', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'waiting', NULL, ?)
                     """,
                     (
                         streamer["id"],
                         live.title,
-                        local_time_text(),
+                        now,
                         str(output),
                         str(log_path),
+                        str(output),
+                        str(log_path),
+                        now,
+                        int(streamer.get("segment_hours") or 0),
+                        json.dumps([str(output)], ensure_ascii=False),
+                        json.dumps([str(log_path)], ensure_ascii=False),
                         streamer["title_template"],
                         process.pid,
                     ),
                 )
                 self._processes[cursor.lastrowid] = process
+            return
+
+        if active and live.is_live and self._should_rotate_segment(dict(active)):
+            self._rotate_segment(streamer, dict(active))
             return
 
         if active and not live.is_live:
@@ -153,6 +172,69 @@ class RecorderScheduler:
                             recording["id"],
                         ),
                     )
+
+    def _should_rotate_segment(self, recording: dict) -> bool:
+        segment_hours = int(recording.get("segment_hours") or 0)
+        if segment_hours <= 0:
+            return False
+        started_at = recording.get("current_segment_started_at") or recording.get("started_at")
+        if not started_at:
+            return False
+        try:
+            started = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            try:
+                started = datetime.fromisoformat(started_at)
+            except ValueError:
+                return False
+        elapsed_seconds = (datetime.now() - started).total_seconds()
+        return elapsed_seconds >= segment_hours * 3600
+
+    def _rotate_segment(self, streamer: dict, recording: dict) -> None:
+        process = self._processes.pop(recording["id"], None)
+        if process:
+            stop_process(process)
+
+        next_index = int(recording.get("current_segment_index") or 1) + 1
+        output = build_recording_path(streamer["name"], next_index)
+        process, log_path = start_recording(streamer, output)
+        segment_paths = self._json_list(recording.get("segment_paths"), recording.get("file_path"))
+        segment_log_paths = self._json_list(recording.get("segment_log_paths"), recording.get("log_path"))
+        segment_paths.append(str(output))
+        segment_log_paths.append(str(log_path))
+        now = local_time_text()
+
+        with get_db() as db:
+            db.execute(
+                """
+                UPDATE recordings
+                SET current_file_path = ?, current_log_path = ?,
+                    current_segment_started_at = ?, current_segment_index = ?,
+                    segment_paths = ?, segment_log_paths = ?, process_id = ?
+                WHERE id = ?
+                """,
+                (
+                    str(output),
+                    str(log_path),
+                    now,
+                    next_index,
+                    json.dumps(segment_paths, ensure_ascii=False),
+                    json.dumps(segment_log_paths, ensure_ascii=False),
+                    process.pid,
+                    recording["id"],
+                ),
+            )
+        self._processes[recording["id"]] = process
+
+    def _json_list(self, value: str | None, fallback: str | None) -> list[str]:
+        if value:
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed if item]
+            except json.JSONDecodeError:
+                pass
+        return [fallback] if fallback else []
 
     def _check_finished_uploads(self) -> None:
         with get_db() as db:

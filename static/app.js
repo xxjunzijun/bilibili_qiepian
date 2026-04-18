@@ -76,6 +76,29 @@ function formatBytes(bytes) {
   return `${value.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
+function parseJsonList(value) {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function segmentText(recording) {
+  const paths = parseJsonList(recording.segment_paths);
+  const count = paths.length || (recording.file_path ? 1 : 0);
+  const segmentHours = Number(recording.segment_hours || 0);
+  if (!segmentHours && count <= 1) {
+    return "";
+  }
+  const rule = segmentHours ? `每 ${segmentHours} 小时分段` : "未设置分段";
+  return `<p class="meta">分段：${rule}，当前 ${count} P${recording.status === "recording" ? `，正在写入 P${recording.current_segment_index || count}` : ""}</p>`;
+}
+
 function networkLine(recording) {
   if (recording.status !== "recording") {
     return "";
@@ -130,6 +153,7 @@ async function loadStreamers() {
           <div>${statusBadge(s.enabled ? "enabled" : "disabled")} ${statusBadge(s.auto_upload ? "auto_upload" : "manual_upload")}</div>
           <p class="meta">房间号：${s.room_id}</p>
           <p class="meta">清晰度：${s.quality || "best"}</p>
+          <p class="meta">分段：${Number(s.segment_hours || 0) ? `每 ${s.segment_hours} 小时` : "不分段"}</p>
           <p class="meta">标签：${s.tags}</p>
           <p class="meta">标题：${s.title_template}</p>
           <p class="meta" data-status-for="${s.id}"></p>
@@ -156,6 +180,7 @@ async function loadRecordings() {
           ${r.status === "recording" ? statusBadge("waiting") : statusBadge(r.upload_status)}
           <p class="meta">${r.live_title || "未记录标题"}</p>
           <p class="meta">${r.file_path || "未生成文件"}</p>
+          ${segmentText(r)}
           ${fileLine(r)}
           ${networkLine(r)}
           ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
@@ -296,6 +321,7 @@ $("#streamer-form").addEventListener("submit", async (event) => {
   payload.enabled = true;
   payload.tid = Number(payload.tid || 171);
   payload.quality = payload.quality || "best";
+  payload.segment_hours = Number(payload.segment_hours || 0);
   $("#streamer-message").textContent = "正在添加主播...";
   $("#add-streamer-button").disabled = true;
   try {

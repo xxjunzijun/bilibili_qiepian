@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -50,14 +51,15 @@ def create_streamer(payload: StreamerIn) -> dict:
         cursor = db.execute(
             """
             INSERT INTO streamers
-                (name, room_id, url, quality, enabled, auto_upload, tid, tags, title_template, description_template)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (name, room_id, url, quality, segment_hours, enabled, auto_upload, tid, tags, title_template, description_template)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.name,
                 room_id,
                 url,
                 payload.quality,
+                payload.segment_hours,
                 int(payload.enabled),
                 int(payload.auto_upload),
                 payload.tid,
@@ -117,7 +119,14 @@ def delete_recording(recording_id: int, delete_file: bool = True) -> dict:
 
         deleted_file = False
         if delete_file:
-            for path_text in (recording.get("file_path"), recording.get("log_path")):
+            path_candidates = [recording.get("file_path"), recording.get("log_path")]
+            for json_field in ("segment_paths", "segment_log_paths"):
+                if recording.get(json_field):
+                    try:
+                        path_candidates.extend(json.loads(recording[json_field]))
+                    except json.JSONDecodeError:
+                        pass
+            for path_text in path_candidates:
                 if not path_text:
                     continue
                 path = Path(path_text).resolve()
@@ -172,7 +181,7 @@ def recording_file_metrics(recording_id: int) -> dict:
     if not row:
         raise HTTPException(status_code=404, detail="Recording not found")
     recording = dict(row)
-    file_path = recording.get("file_path")
+    file_path = recording.get("current_file_path") or recording.get("file_path")
     if not file_path:
         return {"exists": False, "size_bytes": 0, "path": None}
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import signal
+import shlex
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -13,11 +15,12 @@ def _format(template: str, values: dict[str, str | int]) -> str:
     return template.format(**{key: str(value) for key, value in values.items()})
 
 
-def build_recording_path(streamer_name: str) -> Path:
+def build_recording_path(streamer_name: str, segment_index: int = 1) -> Path:
     safe_name = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in streamer_name)
     directory = settings.recordings_dir / safe_name
     directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{datetime.now():%Y%m%d_%H%M%S}.ts"
+    suffix = f"_p{segment_index:02d}" if segment_index > 1 else "_p01"
+    return directory / f"{datetime.now():%Y%m%d_%H%M%S}{suffix}.ts"
 
 
 def start_recording(streamer: dict, output: Path) -> tuple[subprocess.Popen, Path]:
@@ -87,10 +90,15 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
         title=recording.get("live_title") or "",
         url=streamer["url"],
     )
+    files = _recording_files(recording)
+    if not files:
+        return False, "No recording files to upload"
+
     command = _format(
         settings.upload_command,
         {
-            "file": recording["file_path"],
+            "file": files[0],
+            "files": " ".join(shlex.quote(file) for file in files),
             "title": title,
             "description": description,
             "tags": streamer["tags"],
@@ -98,6 +106,18 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
             "source": streamer["url"],
         },
     )
+    if "{files}" not in settings.upload_command and len(files) > 1:
+        command = f"{command} {' '.join(shlex.quote(file) for file in files[1:])}"
     completed = subprocess.run(command, shell=True, capture_output=True, text=True)
     output = (completed.stdout or "") + (completed.stderr or "")
     return completed.returncode == 0, output.strip()
+
+
+def _recording_files(recording: dict) -> list[str]:
+    if recording.get("segment_paths"):
+        try:
+            files = json.loads(recording["segment_paths"])
+            return [str(file) for file in files if file]
+        except json.JSONDecodeError:
+            pass
+    return [recording["file_path"]] if recording.get("file_path") else []
