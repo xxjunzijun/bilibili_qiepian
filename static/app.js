@@ -42,6 +42,8 @@ function statusText(value) {
     uploaded: "已投稿",
     failed: "投稿失败",
     skipped: "不自动投稿",
+    remuxing: "封装中",
+    remuxed: "可预览",
     enabled: "已启用",
     disabled: "已暂停",
     auto_upload: "自动投稿",
@@ -97,6 +99,32 @@ function segmentText(recording) {
   }
   const rule = segmentHours ? `每 ${segmentHours} 小时分段` : "未设置分段";
   return `<p class="meta">分段：${rule}，当前 ${count} P${recording.status === "recording" ? `，正在写入 P${recording.current_segment_index || count}` : ""}</p>`;
+}
+
+function previewButtons(recording) {
+  const paths = parseJsonList(recording.mp4_paths);
+  if (!paths.length) {
+    return "";
+  }
+  return paths
+    .map((_, index) => `<button class="secondary" onclick="openPreview(${recording.id}, ${index + 1})">预览 P${index + 1}</button>`)
+    .join("");
+}
+
+function remuxText(recording) {
+  if (recording.status === "recording") {
+    return "";
+  }
+  if (recording.remux_status === "remuxed") {
+    return `<p class="meta">MP4：已生成，可网页预览</p>`;
+  }
+  if (recording.remux_status === "remuxing") {
+    return `<p class="meta">MP4：正在封装...</p>`;
+  }
+  if (recording.remux_status === "failed") {
+    return `<p class="meta">MP4：封装失败</p>`;
+  }
+  return `<p class="meta">MP4：尚未生成</p>`;
 }
 
 function networkLine(recording) {
@@ -185,10 +213,15 @@ async function loadRecordings() {
           ${networkLine(r)}
           ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
+          ${remuxText(r)}
           ${r.status_check_error ? `<p class="meta status-check-error">状态检查异常：${r.status_check_error}</p>` : ""}
           ${r.error ? `<p class="meta">录制错误：${r.error}</p>` : ""}
+          ${r.remux_error ? `<p class="meta">MP4 封装输出：${r.remux_error}</p>` : ""}
           ${r.upload_error ? `<p class="meta">发布输出：${r.upload_error}</p>` : ""}
           <div class="actions">
+            ${r.status === "recording" ? `<button class="danger" onclick="stopRecording(${r.id})">中断并暂停主播</button>` : ""}
+            ${r.status !== "recording" && r.remux_status !== "remuxed" ? `<button class="secondary" onclick="remuxRecording(${r.id})">生成 MP4 预览</button>` : ""}
+            ${previewButtons(r)}
             ${r.status === "finished" ? `<button class="secondary" onclick="queueUpload(${r.id})">加入投稿队列</button>` : ""}
             ${r.status !== "recording" ? `<button class="danger" onclick="deleteRecording(${r.id})">删除记录和文件</button>` : ""}
           </div>
@@ -304,6 +337,34 @@ async function checkStatus(id) {
 async function queueUpload(id) {
   await api(`/api/recordings/${id}/upload`, { method: "POST" });
   refresh();
+}
+
+async function remuxRecording(id) {
+  await api(`/api/recordings/${id}/remux`, { method: "POST" });
+  refresh();
+}
+
+async function stopRecording(id) {
+  if (!confirm("确定中断当前录制并暂停这个主播？暂停后不会自动重新开录。")) return;
+  await api(`/api/recordings/${id}/stop?disable_streamer=true`, { method: "POST" });
+  refresh();
+}
+
+function openPreview(id, segmentIndex) {
+  const video = $("#preview-video");
+  const dialog = $("#preview-dialog");
+  $("#preview-title").textContent = `视频预览 P${segmentIndex}`;
+  video.src = `/api/recordings/${id}/media/${segmentIndex}`;
+  dialog.showModal();
+  video.play().catch(() => {});
+}
+
+function closePreview() {
+  const video = $("#preview-video");
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  $("#preview-dialog").close();
 }
 
 async function deleteRecording(id) {

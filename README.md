@@ -181,11 +181,18 @@ UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --t
 
 ```text
 RECORD_COMMAND=streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -o "{output}"
+FFMPEG_COMMAND=ffmpeg
 ```
 
 `{quality}` 会由后台添加主播时选择的清晰度替换，例如 `best`、`1080p`、`720p`。
 
 如果开启录制分段，下播后 `{files}` 会包含所有分段文件，`biliup` 会把它们作为同一个稿件的多 P 上传。老配置如果还在使用 `"{file}"`，只会稳定上传第一个文件，建议更新为 `{files}`。
+
+录制完成后服务会用 `ffmpeg -c copy` 自动把 `.ts` 封装成 `.mp4`，用于网页预览和投稿。这个过程不重编码，速度通常很快，画质不变。如果 systemd 找不到 ffmpeg，可以把 `.env` 改成绝对路径：
+
+```text
+FFMPEG_COMMAND=/usr/bin/ffmpeg
+```
 
 ## 使用后台
 
@@ -293,6 +300,8 @@ ip -br addr
 ```
 
 “最近录制”里可以删除已结束的录制记录。删除时会同时删除本地视频文件；正在录制中的任务不能删除。
+
+录制完成后，“最近录制”会显示 MP4 预览按钮。如果历史记录还没有 MP4，可以点击“生成 MP4 预览”。录制中的任务可以点击“中断并暂停主播”，这会停止当前 `streamlink` 进程，并暂停该主播，避免下一轮检测又重新开录。
 
 ## 部署方式二：原生 Python + systemd
 

@@ -114,6 +114,14 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
 
 
 def _recording_files(recording: dict) -> list[str]:
+    if recording.get("mp4_paths"):
+        try:
+            files = json.loads(recording["mp4_paths"])
+            files = [str(file) for file in files if file]
+            if files:
+                return files
+        except json.JSONDecodeError:
+            pass
     if recording.get("segment_paths"):
         try:
             files = json.loads(recording["segment_paths"])
@@ -121,3 +129,43 @@ def _recording_files(recording: dict) -> list[str]:
         except json.JSONDecodeError:
             pass
     return [recording["file_path"]] if recording.get("file_path") else []
+
+
+def source_recording_files(recording: dict) -> list[str]:
+    if recording.get("segment_paths"):
+        try:
+            files = json.loads(recording["segment_paths"])
+            return [str(file) for file in files if file]
+        except json.JSONDecodeError:
+            pass
+    return [recording["file_path"]] if recording.get("file_path") else []
+
+
+def remux_recording_to_mp4(recording: dict) -> tuple[bool, list[str], str]:
+    sources = source_recording_files(recording)
+    if not sources:
+        return False, [], "No recording files to remux"
+
+    outputs: list[str] = []
+    logs: list[str] = []
+    for source in sources:
+        source_path = Path(source)
+        output_path = source_path.with_suffix(".mp4")
+        command = shlex.split(settings.ffmpeg_command) + [
+            "-y",
+            "-i",
+            str(source_path),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True)
+        output = (completed.stdout or "") + (completed.stderr or "")
+        logs.append(output.strip())
+        if completed.returncode != 0:
+            return False, outputs, "\n".join(logs)[-4000:]
+        outputs.append(str(output_path))
+
+    return True, outputs, "\n".join(logs)[-4000:]

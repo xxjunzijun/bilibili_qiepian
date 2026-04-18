@@ -18,6 +18,7 @@ class Settings:
         "RECORD_COMMAND",
         'streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -o "{output}"',
     )
+    ffmpeg_command: str = os.getenv("FFMPEG_COMMAND", "ffmpeg")
     upload_command: str = os.getenv(
         "UPLOAD_COMMAND",
         'biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}',

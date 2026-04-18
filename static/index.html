@@ -150,6 +150,13 @@
       </section>
       </div>
     </main>
-    <script src="/app.js?v=20260418-segments"></script>
+    <dialog id="preview-dialog" class="preview-dialog">
+      <div class="preview-head">
+        <strong id="preview-title">视频预览</strong>
+        <button class="secondary" onclick="closePreview()">关闭</button>
+      </div>
+      <video id="preview-video" controls playsinline></video>
+    </dialog>
+    <script src="/app.js?v=20260419-preview-stop"></script>
   </body>
 </html>

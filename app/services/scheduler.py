@@ -8,7 +8,7 @@ from datetime import datetime
 from app.config import settings
 from app.db import get_db
 from app.services.bilibili import fetch_live_status
-from app.services.commands import build_recording_path, start_recording, stop_process, upload_recording
+from app.services.commands import build_recording_path, remux_recording_to_mp4, start_recording, stop_process, upload_recording
 from app.time_utils import local_time_text
 
 
@@ -47,6 +47,7 @@ class RecorderScheduler:
 
         for streamer in streamers:
             self._check_streamer(streamer)
+        self._check_finished_remux()
         self._check_finished_uploads()
 
     def _check_streamer(self, streamer: dict) -> None:
@@ -83,10 +84,10 @@ class RecorderScheduler:
                             streamer_id, status, live_title, started_at,
                             file_path, log_path, current_file_path, current_log_path,
                             current_segment_started_at, current_segment_index, segment_hours,
-                            segment_paths, segment_log_paths, upload_title,
+                            segment_paths, segment_log_paths, remux_status, upload_title,
                             upload_status, status_check_error, process_id
                         )
-                    VALUES (?, 'recording', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'waiting', NULL, ?)
+                    VALUES (?, 'recording', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'not_started', ?, 'waiting', NULL, ?)
                     """,
                     (
                         streamer["id"],
@@ -116,14 +117,15 @@ class RecorderScheduler:
             if process:
                 stop_process(process)
             next_upload_status = "pending" if streamer["auto_upload"] else "skipped"
+            next_remux_status = "pending"
             with get_db() as db:
                 db.execute(
                     """
                     UPDATE recordings
-                    SET status = 'finished', ended_at = ?, upload_status = ?
+                    SET status = 'finished', ended_at = ?, upload_status = ?, remux_status = ?
                     WHERE id = ?
                     """,
-                    (local_time_text(), next_upload_status, active["id"]),
+                    (local_time_text(), next_upload_status, next_remux_status, active["id"]),
                 )
 
     def _sync_recording_processes(self) -> None:
@@ -254,6 +256,28 @@ class RecorderScheduler:
             ]
 
         for row in pending:
+            if row.get("remux_status") != "remuxed":
+                ok, output = self.remux_recording(row["id"])
+                if not ok:
+                    with get_db() as db:
+                        db.execute(
+                            "UPDATE recordings SET upload_status = 'failed', upload_error = ? WHERE id = ?",
+                            (f"MP4 封装失败：{output[-1800:]}", row["id"]),
+                        )
+                    continue
+                with get_db() as db:
+                    fresh = db.execute(
+                        """
+                        SELECT r.*, s.name, s.room_id, s.url, s.auto_upload, s.tid, s.tags,
+                               s.title_template, s.description_template
+                        FROM recordings r
+                        JOIN streamers s ON s.id = r.streamer_id
+                        WHERE r.id = ?
+                        """,
+                        (row["id"],),
+                    ).fetchone()
+                    if fresh:
+                        row = dict(fresh)
             with get_db() as db:
                 db.execute("UPDATE recordings SET upload_status = 'uploading', upload_error = NULL WHERE id = ?", (row["id"],))
             ok, output = upload_recording(row, row)
@@ -262,6 +286,73 @@ class RecorderScheduler:
                     "UPDATE recordings SET upload_status = ?, upload_error = ? WHERE id = ?",
                     ("uploaded" if ok else "failed", output[-2000:], row["id"]),
                 )
+
+    def _check_finished_remux(self) -> None:
+        with get_db() as db:
+            row = db.execute(
+                """
+                SELECT *
+                FROM recordings
+                WHERE status = 'finished' AND remux_status = 'pending'
+                ORDER BY id ASC
+                LIMIT 1
+                """
+            ).fetchone()
+        if row:
+            self.remux_recording(row["id"])
+
+    def remux_recording(self, recording_id: int) -> tuple[bool, str]:
+        with get_db() as db:
+            row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
+            if not row:
+                return False, "Recording not found"
+            recording = dict(row)
+            if recording["status"] == "recording":
+                return False, "Recording is still running"
+            db.execute(
+                "UPDATE recordings SET remux_status = 'remuxing', remux_error = NULL WHERE id = ?",
+                (recording_id,),
+            )
+
+        ok, mp4_paths, output = remux_recording_to_mp4(recording)
+        with get_db() as db:
+            db.execute(
+                "UPDATE recordings SET remux_status = ?, mp4_paths = ?, remux_error = ? WHERE id = ?",
+                (
+                    "remuxed" if ok else "failed",
+                    json.dumps(mp4_paths, ensure_ascii=False) if mp4_paths else recording.get("mp4_paths"),
+                    None if ok else output[-2000:],
+                    recording_id,
+                ),
+            )
+        return ok, output
+
+    def stop_recording(self, recording_id: int, disable_streamer: bool = True) -> tuple[bool, str]:
+        with get_db() as db:
+            row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
+            if not row:
+                return False, "Recording not found"
+            recording = dict(row)
+            if recording["status"] != "recording":
+                return False, "Recording is not running"
+
+        process = self._processes.pop(recording_id, None)
+        if process:
+            stop_process(process)
+
+        with get_db() as db:
+            db.execute(
+                """
+                UPDATE recordings
+                SET status = 'interrupted', ended_at = ?, upload_status = 'skipped',
+                    error = ?
+                WHERE id = ?
+                """,
+                (local_time_text(), "用户手动中断录制。", recording_id),
+            )
+            if disable_streamer:
+                db.execute("UPDATE streamers SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (recording["streamer_id"],))
+        return True, "Recording stopped"
 
 
 scheduler = RecorderScheduler()

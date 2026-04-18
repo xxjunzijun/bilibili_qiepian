@@ -62,6 +62,9 @@ def init_db() -> None:
                 segment_hours INTEGER NOT NULL DEFAULT 0,
                 segment_paths TEXT,
                 segment_log_paths TEXT,
+                mp4_paths TEXT,
+                remux_status TEXT NOT NULL DEFAULT 'not_started',
+                remux_error TEXT,
                 upload_title TEXT,
                 upload_status TEXT NOT NULL DEFAULT 'not_started',
                 upload_error TEXT,
@@ -83,6 +86,9 @@ def init_db() -> None:
         _ensure_column(db, "recordings", "segment_hours", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(db, "recordings", "segment_paths", "TEXT")
         _ensure_column(db, "recordings", "segment_log_paths", "TEXT")
+        _ensure_column(db, "recordings", "mp4_paths", "TEXT")
+        _ensure_column(db, "recordings", "remux_status", "TEXT NOT NULL DEFAULT 'not_started'")
+        _ensure_column(db, "recordings", "remux_error", "TEXT")
 
 
 def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:
