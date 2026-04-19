@@ -130,7 +130,17 @@ class RecorderScheduler:
 
     def _sync_recording_processes(self) -> None:
         with get_db() as db:
-            active = [dict(row) for row in db.execute("SELECT * FROM recordings WHERE status = 'recording'")]
+            active = [
+                dict(row)
+                for row in db.execute(
+                    """
+                    SELECT r.*, s.auto_upload
+                    FROM recordings r
+                    JOIN streamers s ON s.id = r.streamer_id
+                    WHERE r.status = 'recording'
+                    """,
+                )
+            ]
 
         for recording in active:
             process = self._processes.get(recording["id"])
@@ -145,7 +155,7 @@ class RecorderScheduler:
                         """,
                         (
                             local_time_text(),
-                            "录制进程不在当前服务内存中，可能是服务重启或进程异常退出。",
+                            "Recording process is not managed by this service. The service may have restarted or the process exited unexpectedly.",
                             recording["id"],
                         ),
                     )
@@ -161,19 +171,34 @@ class RecorderScheduler:
                     except Exception:
                         pass
                 with get_db() as db:
-                    db.execute(
-                        """
-                        UPDATE recordings
-                        SET status = 'recording_failed', ended_at = ?, upload_status = 'skipped',
-                            error = ?
-                        WHERE id = ?
-                        """,
-                        (
-                            local_time_text(),
-                            f"streamlink 进程已退出，退出码：{return_code}。请查看录制日志。",
-                            recording["id"],
-                        ),
-                    )
+                    if return_code == 0:
+                        db.execute(
+                            """
+                            UPDATE recordings
+                            SET status = 'finished', ended_at = ?, upload_status = ?,
+                                remux_status = 'pending', error = NULL
+                            WHERE id = ?
+                            """,
+                            (
+                                local_time_text(),
+                                "pending" if recording["auto_upload"] else "skipped",
+                                recording["id"],
+                            ),
+                        )
+                    else:
+                        db.execute(
+                            """
+                            UPDATE recordings
+                            SET status = 'recording_failed', ended_at = ?, upload_status = 'skipped',
+                                error = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                local_time_text(),
+                                f"streamlink exited with code {return_code}. Please check the recording log.",
+                                recording["id"],
+                            ),
+                        )
 
     def _should_rotate_segment(self, recording: dict) -> bool:
         segment_hours = int(recording.get("segment_hours") or 0)
@@ -262,7 +287,7 @@ class RecorderScheduler:
                     with get_db() as db:
                         db.execute(
                             "UPDATE recordings SET upload_status = 'failed', upload_error = ? WHERE id = ?",
-                            (f"MP4 封装失败：{output[-1800:]}", row["id"]),
+                            (f"MP4 remux failed: {output[-1800:]}", row["id"]),
                         )
                     continue
                 with get_db() as db:
@@ -348,7 +373,7 @@ class RecorderScheduler:
                     error = ?
                 WHERE id = ?
                 """,
-                (local_time_text(), "用户手动中断录制。", recording_id),
+                (local_time_text(), "Recording stopped by user.", recording_id),
             )
             if disable_streamer:
                 db.execute("UPDATE streamers SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (recording["streamer_id"],))
