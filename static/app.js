@@ -24,9 +24,15 @@ function showDashboard() {
   $("#dashboard").hidden = false;
 }
 
-function badge(value) {
-  const cls = ["uploaded", "finished"].includes(value) ? "ok" : ["failed"].includes(value) ? "bad" : "";
+function badge(value, cls = "") {
   return `<span class="badge ${cls}">${value}</span>`;
+}
+
+function statusClass(value) {
+  const good = ["finished", "uploaded", "remuxed", "enabled", "auto_upload"];
+  const bad = ["failed", "recording_failed"];
+  const working = ["recording", "waiting", "pending", "uploading", "remuxing"];
+  return good.includes(value) ? "ok" : bad.includes(value) ? "bad" : working.includes(value) ? "working" : "";
 }
 
 function statusText(value) {
@@ -53,7 +59,7 @@ function statusText(value) {
 }
 
 function statusBadge(value) {
-  return badge(statusText(value));
+  return badge(statusText(value), statusClass(value));
 }
 
 function formatMBps(bytesPerSecond) {
@@ -116,15 +122,36 @@ function remuxText(recording) {
     return "";
   }
   if (recording.remux_status === "remuxed") {
-    return `<p class="meta">MP4：已生成，可网页预览</p>`;
+    return `<p class="meta">MP4：${statusBadge("remuxed")} 可网页预览</p>`;
   }
   if (recording.remux_status === "remuxing") {
-    return `<p class="meta">MP4：正在封装...</p>`;
+    return `<p class="meta">MP4：${statusBadge("remuxing")}</p>`;
   }
   if (recording.remux_status === "failed") {
-    return `<p class="meta">MP4：封装失败</p>`;
+    return `<p class="meta">MP4：${statusBadge("failed")}</p>`;
   }
-  return `<p class="meta">MP4：尚未生成</p>`;
+  return `<p class="meta">MP4：${statusBadge("not_started")}</p>`;
+}
+
+function remuxQualitySelect(recording) {
+  const id = `remux-quality-${recording.id}`;
+  const current = recording.mp4_profile || "default";
+  const options = [
+    ["default", "默认配置"],
+    ["copy", "原样封装（最快）"],
+    ["small", "小体积"],
+    ["balanced", "均衡"],
+    ["high", "高质量"],
+  ];
+  return `
+    <select class="compact-select" id="${id}" aria-label="MP4 品质">
+      ${options.map(([value, label]) => `<option value="${value}" ${current === value ? "selected" : ""}>${label}</option>`).join("")}
+    </select>
+  `;
+}
+
+function selectedRemuxQuality(id) {
+  return document.querySelector(`#remux-quality-${id}`)?.value || "default";
 }
 
 function canManualUpload(recording) {
@@ -135,6 +162,10 @@ function canManualUpload(recording) {
     return false;
   }
   return Boolean(recording.file_path || recording.segment_paths || recording.mp4_paths);
+}
+
+function canRemux(recording) {
+  return recording.status !== "recording" && !["uploading"].includes(recording.upload_status) && recording.remux_status !== "remuxing";
 }
 
 function networkLine(recording) {
@@ -230,7 +261,8 @@ async function loadRecordings() {
           ${r.upload_error ? `<p class="meta">发布输出：${r.upload_error}</p>` : ""}
           <div class="actions">
             ${r.status === "recording" ? `<button class="danger" onclick="stopRecording(${r.id})">中断并暂停主播</button>` : ""}
-            ${r.status !== "recording" && r.remux_status !== "remuxed" ? `<button class="secondary" onclick="remuxRecording(${r.id})">生成 MP4 预览</button>` : ""}
+            ${r.status !== "recording" ? remuxQualitySelect(r) : ""}
+            ${canRemux(r) ? `<button class="secondary" onclick="remuxRecording(${r.id})">${r.remux_status === "remuxed" ? "重新生成 MP4" : "生成 MP4 预览"}</button>` : ""}
             ${previewButtons(r)}
             ${canManualUpload(r) ? `<button class="secondary" onclick="queueUpload(${r.id})">手动投稿</button>` : ""}
             ${r.status !== "recording" ? `<button class="danger" onclick="deleteRecording(${r.id})">删除记录和文件</button>` : ""}
@@ -345,12 +377,18 @@ async function checkStatus(id) {
 }
 
 async function queueUpload(id) {
-  await api(`/api/recordings/${id}/upload`, { method: "POST" });
+  await api(`/api/recordings/${id}/upload`, {
+    method: "POST",
+    body: JSON.stringify({ quality: selectedRemuxQuality(id) }),
+  });
   refresh();
 }
 
 async function remuxRecording(id) {
-  await api(`/api/recordings/${id}/remux`, { method: "POST" });
+  await api(`/api/recordings/${id}/remux`, {
+    method: "POST",
+    body: JSON.stringify({ quality: selectedRemuxQuality(id) }),
+  });
   refresh();
 }
 

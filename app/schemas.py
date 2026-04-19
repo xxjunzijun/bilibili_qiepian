@@ -29,3 +29,11 @@ class StreamerPatch(BaseModel):
     tags: str | None = None
     title_template: str | None = None
     description_template: str | None = None
+
+
+class RemuxIn(BaseModel):
+    quality: str = "default"
+
+
+class UploadIn(BaseModel):
+    quality: str = "default"

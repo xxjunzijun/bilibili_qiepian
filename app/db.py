@@ -63,6 +63,7 @@ def init_db() -> None:
                 segment_paths TEXT,
                 segment_log_paths TEXT,
                 mp4_paths TEXT,
+                mp4_profile TEXT,
                 remux_status TEXT NOT NULL DEFAULT 'not_started',
                 remux_error TEXT,
                 upload_title TEXT,
@@ -87,6 +88,7 @@ def init_db() -> None:
         _ensure_column(db, "recordings", "segment_paths", "TEXT")
         _ensure_column(db, "recordings", "segment_log_paths", "TEXT")
         _ensure_column(db, "recordings", "mp4_paths", "TEXT")
+        _ensure_column(db, "recordings", "mp4_profile", "TEXT")
         _ensure_column(db, "recordings", "remux_status", "TEXT NOT NULL DEFAULT 'not_started'")
         _ensure_column(db, "recordings", "remux_error", "TEXT")
 

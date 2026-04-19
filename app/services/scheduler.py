@@ -326,7 +326,7 @@ class RecorderScheduler:
         if row:
             self.remux_recording(row["id"])
 
-    def remux_recording(self, recording_id: int) -> tuple[bool, str]:
+    def remux_recording(self, recording_id: int, profile: str | None = None) -> tuple[bool, str]:
         with get_db() as db:
             row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
             if not row:
@@ -334,12 +334,14 @@ class RecorderScheduler:
             recording = dict(row)
             if recording["status"] == "recording":
                 return False, "Recording is still running"
+            profile_name = profile or recording.get("mp4_profile") or "default"
             db.execute(
-                "UPDATE recordings SET remux_status = 'remuxing', remux_error = NULL WHERE id = ?",
-                (recording_id,),
+                "UPDATE recordings SET remux_status = 'remuxing', remux_error = NULL, mp4_profile = ? WHERE id = ?",
+                (profile_name, recording_id),
             )
 
-        ok, mp4_paths, output = remux_recording_to_mp4(recording)
+        recording["mp4_profile"] = profile_name
+        ok, mp4_paths, output = remux_recording_to_mp4(recording, profile_name)
         with get_db() as db:
             db.execute(
                 "UPDATE recordings SET remux_status = ?, mp4_paths = ?, remux_error = ? WHERE id = ?",

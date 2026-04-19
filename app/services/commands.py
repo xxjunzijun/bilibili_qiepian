@@ -141,17 +141,26 @@ def source_recording_files(recording: dict) -> list[str]:
     return [recording["file_path"]] if recording.get("file_path") else []
 
 
-def remux_recording_to_mp4(recording: dict) -> tuple[bool, list[str], str]:
+TRANSCODE_PROFILES = {
+    "copy": {"mode": "copy"},
+    "small": {"mode": "h264", "crf": 30, "preset": "veryfast", "audio_bitrate": "96k"},
+    "balanced": {"mode": "h264", "crf": 28, "preset": "veryfast", "audio_bitrate": "128k"},
+    "high": {"mode": "h264", "crf": 24, "preset": "fast", "audio_bitrate": "160k"},
+}
+
+
+def remux_recording_to_mp4(recording: dict, profile: str | None = None) -> tuple[bool, list[str], str]:
     sources = source_recording_files(recording)
     if not sources:
         return False, [], "No recording files to remux"
 
+    profile_name = _normalize_transcode_profile(profile or recording.get("mp4_profile") or "default")
     outputs: list[str] = []
     logs: list[str] = []
     for source in sources:
         source_path = Path(source)
         output_path = source_path.with_suffix(".mp4")
-        command = _build_mp4_command(source_path, output_path)
+        command = _build_mp4_command(source_path, output_path, profile_name)
         completed = subprocess.run(command, capture_output=True, text=True)
         output = (completed.stdout or "") + (completed.stderr or "")
         logs.append(output.strip())
@@ -162,9 +171,24 @@ def remux_recording_to_mp4(recording: dict) -> tuple[bool, list[str], str]:
     return True, outputs, "\n".join(logs)[-4000:]
 
 
-def _build_mp4_command(source_path: Path, output_path: Path) -> list[str]:
+def _normalize_transcode_profile(profile: str | None) -> str:
+    profile_name = (profile or "default").strip().lower()
+    if profile_name == "default":
+        return settings.video_transcode_mode if settings.video_transcode_mode in ("copy", "h264") else "balanced"
+    if profile_name == "h264":
+        return "h264"
+    return profile_name if profile_name in TRANSCODE_PROFILES else "balanced"
+
+
+def _build_mp4_command(source_path: Path, output_path: Path, profile: str | None = None) -> list[str]:
     command = shlex.split(settings.ffmpeg_command) + ["-y", "-i", str(source_path)]
-    if settings.video_transcode_mode == "h264":
+    profile_name = _normalize_transcode_profile(profile)
+    options = (
+        {"mode": "h264"}
+        if profile_name == "h264"
+        else TRANSCODE_PROFILES.get(profile_name, TRANSCODE_PROFILES["balanced"])
+    )
+    if options["mode"] == "h264":
         command.extend(
             [
                 "-map",
@@ -174,13 +198,13 @@ def _build_mp4_command(source_path: Path, output_path: Path) -> list[str]:
                 "-c:v",
                 "libx264",
                 "-preset",
-                settings.video_transcode_preset or "veryfast",
+                str(options.get("preset") or settings.video_transcode_preset or "veryfast"),
                 "-crf",
-                str(settings.video_transcode_crf),
+                str(options.get("crf") or settings.video_transcode_crf),
                 "-c:a",
                 "aac",
                 "-b:a",
-                settings.video_audio_bitrate or "128k",
+                str(options.get("audio_bitrate") or settings.video_audio_bitrate or "128k"),
             ]
         )
     else:

@@ -6,6 +6,7 @@
   --line: #d8dee8;
   --accent: #00a1d6;
   --ok: #1b8f5a;
+  --working: #a86f00;
   --bad: #c13d3d;
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
 }
@@ -257,6 +258,12 @@ textarea {
   background: #fff;
 }
 
+.compact-select {
+  width: auto;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
 textarea {
   min-height: 92px;
   resize: vertical;
@@ -365,6 +372,11 @@ label {
 .badge.ok {
   background: #e8f6ef;
   color: var(--ok);
+}
+
+.badge.working {
+  background: #fff4d8;
+  color: var(--working);
 }
 
 .badge.bad {

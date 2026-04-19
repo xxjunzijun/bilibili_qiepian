@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import BASE_DIR, settings
 from app.db import get_db, init_db
-from app.schemas import StreamerIn, StreamerPatch
+from app.schemas import RemuxIn, StreamerIn, StreamerPatch, UploadIn
 from app.services.bilibili import fetch_live_status, normalize_room_id, room_url
 from app.services.network import read_network_rx_bytes
 from app.services.scheduler import scheduler
@@ -214,8 +214,8 @@ def recording_file_metrics(recording_id: int) -> dict:
 
 
 @app.post("/api/recordings/{recording_id}/remux")
-def remux_recording(recording_id: int) -> dict:
-    ok, output = scheduler.remux_recording(recording_id)
+def remux_recording(recording_id: int, payload: RemuxIn = RemuxIn()) -> dict:
+    ok, output = scheduler.remux_recording(recording_id, payload.quality)
     if not ok:
         raise HTTPException(status_code=400, detail=output)
     with get_db() as db:
@@ -253,7 +253,7 @@ def recording_media(recording_id: int, segment_index: int) -> FileResponse:
 
 
 @app.post("/api/recordings/{recording_id}/upload")
-def queue_upload(recording_id: int) -> dict:
+def queue_upload(recording_id: int, payload: UploadIn = UploadIn()) -> dict:
     with get_db() as db:
         row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
         if not row:
@@ -266,6 +266,7 @@ def queue_upload(recording_id: int) -> dict:
             raise HTTPException(status_code=400, detail="Recording has no media file")
         remux_status = recording.get("remux_status") or "not_started"
         next_remux_status = remux_status if remux_status == "remuxed" else "pending"
+        profile_name = (payload.quality or recording.get("mp4_profile") or "default").strip().lower()
         db.execute(
             """
             UPDATE recordings
@@ -273,10 +274,11 @@ def queue_upload(recording_id: int) -> dict:
                 upload_status = 'pending',
                 upload_error = NULL,
                 remux_status = ?,
+                mp4_profile = ?,
                 remux_error = NULL
             WHERE id = ?
             """,
-            (next_remux_status, recording_id),
+            (next_remux_status, profile_name, recording_id),
         )
     return {"ok": True}
 
