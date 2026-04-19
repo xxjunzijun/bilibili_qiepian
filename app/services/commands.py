@@ -151,16 +151,7 @@ def remux_recording_to_mp4(recording: dict) -> tuple[bool, list[str], str]:
     for source in sources:
         source_path = Path(source)
         output_path = source_path.with_suffix(".mp4")
-        command = shlex.split(settings.ffmpeg_command) + [
-            "-y",
-            "-i",
-            str(source_path),
-            "-c",
-            "copy",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ]
+        command = _build_mp4_command(source_path, output_path)
         completed = subprocess.run(command, capture_output=True, text=True)
         output = (completed.stdout or "") + (completed.stderr or "")
         logs.append(output.strip())
@@ -169,3 +160,30 @@ def remux_recording_to_mp4(recording: dict) -> tuple[bool, list[str], str]:
         outputs.append(str(output_path))
 
     return True, outputs, "\n".join(logs)[-4000:]
+
+
+def _build_mp4_command(source_path: Path, output_path: Path) -> list[str]:
+    command = shlex.split(settings.ffmpeg_command) + ["-y", "-i", str(source_path)]
+    if settings.video_transcode_mode == "h264":
+        command.extend(
+            [
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
+                "-c:v",
+                "libx264",
+                "-preset",
+                settings.video_transcode_preset or "veryfast",
+                "-crf",
+                str(settings.video_transcode_crf),
+                "-c:a",
+                "aac",
+                "-b:a",
+                settings.video_audio_bitrate or "128k",
+            ]
+        )
+    else:
+        command.extend(["-c", "copy"])
+    command.extend(["-movflags", "+faststart", str(output_path)])
+    return command

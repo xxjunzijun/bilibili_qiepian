@@ -19,6 +19,10 @@ class Settings:
         'streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -o "{output}"',
     )
     ffmpeg_command: str = os.getenv("FFMPEG_COMMAND", "ffmpeg")
+    video_transcode_mode: str = os.getenv("VIDEO_TRANSCODE_MODE", "copy").strip().lower()
+    video_transcode_crf: int = int(os.getenv("VIDEO_TRANSCODE_CRF", "28"))
+    video_transcode_preset: str = os.getenv("VIDEO_TRANSCODE_PRESET", "veryfast").strip()
+    video_audio_bitrate: str = os.getenv("VIDEO_AUDIO_BITRATE", "128k").strip()
     upload_command: str = os.getenv(
         "UPLOAD_COMMAND",
         'biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}',

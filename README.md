@@ -182,6 +182,10 @@ UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --t
 ```text
 RECORD_COMMAND=streamlink --retry-streams 60 --retry-max 3 "{url}" "{quality}" -o "{output}"
 FFMPEG_COMMAND=ffmpeg
+VIDEO_TRANSCODE_MODE=copy
+VIDEO_TRANSCODE_CRF=28
+VIDEO_TRANSCODE_PRESET=veryfast
+VIDEO_AUDIO_BITRATE=128k
 ```
 
 `{quality}` 会由后台添加主播时选择的清晰度替换，例如 `best`、`1080p`、`720p`。
@@ -193,6 +197,17 @@ FFMPEG_COMMAND=ffmpeg
 ```text
 FFMPEG_COMMAND=/usr/bin/ffmpeg
 ```
+
+如果想降低视频体积，可以开启转码压缩：
+
+```text
+VIDEO_TRANSCODE_MODE=h264
+VIDEO_TRANSCODE_CRF=28
+VIDEO_TRANSCODE_PRESET=veryfast
+VIDEO_AUDIO_BITRATE=128k
+```
+
+`CRF` 越大体积越小、画质越低，常用范围是 `23` 到 `30`。建议先用 `28`，如果觉得糊就改成 `26` 或 `24`。开启压缩后会明显增加 CPU 占用，录制结束后的 MP4 生成时间也会变长；录制中的 `.ts` 原文件仍会保留，网页预览和投稿会优先使用压缩后的 `.mp4`。
 
 ## 使用后台
 
