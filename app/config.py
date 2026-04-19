@@ -29,6 +29,8 @@ class Settings:
     )
     upload_retry_attempts: int = int(os.getenv("UPLOAD_RETRY_ATTEMPTS", "3"))
     upload_retry_delay_seconds: int = int(os.getenv("UPLOAD_RETRY_DELAY_SECONDS", "60"))
+    upload_deferred_retry_attempts: int = int(os.getenv("UPLOAD_DEFERRED_RETRY_ATTEMPTS", "12"))
+    upload_deferred_retry_delay_seconds: int = int(os.getenv("UPLOAD_DEFERRED_RETRY_DELAY_SECONDS", "600"))
 
     @property
     def database_path(self) -> Path:

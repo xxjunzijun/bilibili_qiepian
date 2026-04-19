@@ -8,7 +8,14 @@ from datetime import datetime
 from app.config import settings
 from app.db import get_db
 from app.services.bilibili import fetch_live_status
-from app.services.commands import build_recording_path, remux_recording_to_mp4, start_recording, stop_process, upload_recording
+from app.services.commands import (
+    build_recording_path,
+    is_retryable_upload_error,
+    remux_recording_to_mp4,
+    start_recording,
+    stop_process,
+    upload_recording,
+)
 from app.time_utils import local_time_text
 
 
@@ -273,10 +280,13 @@ class RecorderScheduler:
                            s.title_template, s.description_template
                     FROM recordings r
                     JOIN streamers s ON s.id = r.streamer_id
-                    WHERE r.status = 'finished' AND r.upload_status = 'pending'
+                    WHERE r.status = 'finished'
+                      AND r.upload_status = 'pending'
+                      AND (r.next_upload_at IS NULL OR r.next_upload_at <= ?)
                     ORDER BY r.id ASC
                     LIMIT 1
-                    """
+                    """,
+                    (int(time.time()),),
                 )
             ]
 
@@ -304,13 +314,50 @@ class RecorderScheduler:
                     if fresh:
                         row = dict(fresh)
             with get_db() as db:
-                db.execute("UPDATE recordings SET upload_status = 'uploading', upload_error = NULL WHERE id = ?", (row["id"],))
+                db.execute("UPDATE recordings SET upload_status = 'uploading' WHERE id = ?", (row["id"],))
             ok, output = upload_recording(row, row)
             with get_db() as db:
-                db.execute(
-                    "UPDATE recordings SET upload_status = ?, upload_error = ? WHERE id = ?",
-                    ("uploaded" if ok else "failed", output[-2000:], row["id"]),
-                )
+                if ok:
+                    db.execute(
+                        """
+                        UPDATE recordings
+                        SET upload_status = 'uploaded', upload_error = ?, upload_retry_count = 0, next_upload_at = NULL
+                        WHERE id = ?
+                        """,
+                        (output[-4000:], row["id"]),
+                    )
+                elif self._should_defer_upload_retry(row, output):
+                    retry_count = int(row.get("upload_retry_count") or 0) + 1
+                    next_upload_at = int(time.time()) + settings.upload_deferred_retry_delay_seconds
+                    next_retry_text = datetime.fromtimestamp(next_upload_at).strftime("%Y-%m-%d %H:%M:%S")
+                    db.execute(
+                        """
+                        UPDATE recordings
+                        SET upload_status = 'pending',
+                            upload_error = ?,
+                            upload_retry_count = ?,
+                            next_upload_at = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            f"Network upload failed. Will retry at {next_retry_text}. "
+                            f"Deferred retry {retry_count}/{settings.upload_deferred_retry_attempts}.\n{output[-3500:]}",
+                            retry_count,
+                            next_upload_at,
+                            row["id"],
+                        ),
+                    )
+                else:
+                    db.execute(
+                        "UPDATE recordings SET upload_status = 'failed', upload_error = ? WHERE id = ?",
+                        (output[-4000:], row["id"]),
+                    )
+
+    def _should_defer_upload_retry(self, recording: dict, output: str) -> bool:
+        if not is_retryable_upload_error(output):
+            return False
+        retry_count = int(recording.get("upload_retry_count") or 0)
+        return retry_count < settings.upload_deferred_retry_attempts
 
     def _check_finished_remux(self) -> None:
         with get_db() as db:

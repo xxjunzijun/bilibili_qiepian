@@ -11,6 +11,18 @@ from pathlib import Path
 
 from app.config import settings
 
+RETRYABLE_UPLOAD_MARKERS = (
+    "Temporary failure in name resolution",
+    "failed to lookup address information",
+    "dns error",
+    "client error (Connect)",
+    "connection reset",
+    "connection refused",
+    "connection timed out",
+    "operation timed out",
+    "timed out",
+)
+
 
 def _format(template: str, values: dict[str, str | int]) -> str:
     return template.format(**{key: str(value) for key, value in values.items()})
@@ -121,6 +133,11 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
         if attempt < attempts and delay_seconds:
             time.sleep(delay_seconds)
     return False, "\n\n".join(outputs)[-4000:]
+
+
+def is_retryable_upload_error(output: str) -> bool:
+    lowered = output.lower()
+    return any(marker.lower() in lowered for marker in RETRYABLE_UPLOAD_MARKERS)
 
 
 def _recording_files(recording: dict) -> list[str]:

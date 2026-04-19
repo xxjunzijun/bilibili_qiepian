@@ -69,6 +69,8 @@ def init_db() -> None:
                 upload_title TEXT,
                 upload_status TEXT NOT NULL DEFAULT 'not_started',
                 upload_error TEXT,
+                upload_retry_count INTEGER NOT NULL DEFAULT 0,
+                next_upload_at INTEGER,
                 process_id INTEGER,
                 status_check_error TEXT,
                 error TEXT,
@@ -91,6 +93,8 @@ def init_db() -> None:
         _ensure_column(db, "recordings", "mp4_profile", "TEXT")
         _ensure_column(db, "recordings", "remux_status", "TEXT NOT NULL DEFAULT 'not_started'")
         _ensure_column(db, "recordings", "remux_error", "TEXT")
+        _ensure_column(db, "recordings", "upload_retry_count", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(db, "recordings", "next_upload_at", "INTEGER")
 
 
 def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:
