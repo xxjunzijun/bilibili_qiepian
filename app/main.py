@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -229,6 +230,75 @@ def recording_file_metrics(recording_id: int) -> dict:
         "paths": existing_paths,
         "file_count": len(existing_paths),
     }
+
+
+@app.get("/api/recordings/{recording_id}/upload-progress")
+def upload_progress(recording_id: int) -> dict:
+    with get_db() as db:
+        row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    recording = dict(row)
+    if recording.get("upload_status") == "uploaded":
+        return {"available": True, "percent": 100, "current": None, "total": None, "message": "上传完成"}
+    log_path_text = recording.get("upload_log_path")
+    if not log_path_text:
+        return {"available": False, "percent": None, "current": None, "total": None, "message": "等待投稿日志"}
+
+    log_path = Path(log_path_text).resolve()
+    recordings_root = settings.recordings_dir.resolve()
+    try:
+        log_path.relative_to(recordings_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Refuse to read log outside recordings directory") from exc
+    if not log_path.exists() or not log_path.is_file():
+        return {"available": False, "percent": None, "current": None, "total": None, "message": "等待投稿日志"}
+
+    text = _read_file_tail(log_path, 262144)
+    progress = _parse_upload_progress(text)
+    if progress:
+        current, total = progress
+        percent = round(min(100, max(0, current / total * 100)), 2) if total else None
+        return {
+            "available": True,
+            "percent": percent,
+            "current": current,
+            "total": total,
+            "message": f"分片 {current}/{total}",
+        }
+    if recording.get("upload_status") == "uploading":
+        return {"available": False, "percent": None, "current": None, "total": None, "message": "上传中，等待分片进度"}
+    return {"available": False, "percent": None, "current": None, "total": None, "message": "暂无上传进度"}
+
+
+def _read_file_tail(path: Path, size: int) -> str:
+    with path.open("rb") as file:
+        file.seek(0, 2)
+        length = file.tell()
+        file.seek(max(0, length - size))
+        return file.read().decode("utf-8", errors="ignore")
+
+
+def _parse_upload_progress(text: str) -> tuple[int, int] | None:
+    matches = list(re.finditer(r"(?:[?&]|\\b)chunks=(\d+).*?(?:[?&]|\\b)(?:chunk|partNumber)=(\d+)", text))
+    matches += list(re.finditer(r"(?:[?&]|\\b)(?:chunk|partNumber)=(\d+).*?(?:[?&]|\\b)chunks=(\d+)", text))
+    if not matches:
+        return None
+    match = matches[-1]
+    first = int(match.group(1))
+    second = int(match.group(2))
+    if "chunks=" in match.group(0).split(str(first), 1)[0]:
+        total, current = first, second
+    else:
+        current, total = first, second
+    if total <= 0:
+        return None
+    if current <= 0:
+        current = 1
+    # biliup logs may include zero-based chunk plus one-based partNumber. Treat chunk as at least the current part.
+    if current < total and "chunk=" in match.group(0) and "partNumber=" not in match.group(0):
+        current += 1
+    return min(current, total), total
 
 
 def _metric_file_paths(recording: dict) -> list[str]:

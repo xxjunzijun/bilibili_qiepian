@@ -319,6 +319,50 @@ label {
   font-weight: 400;
 }
 
+.upload-progress {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #eef3f7;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 8px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.progress-bar.indeterminate {
+  animation: progress-pulse 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes progress-pulse {
+  from {
+    opacity: 0.45;
+    transform: translateX(-12%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(12%);
+  }
+}
+
 .actions {
   display: flex;
   gap: 8px;
