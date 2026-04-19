@@ -62,11 +62,13 @@ function statusBadge(value) {
   return badge(statusText(value), statusClass(value));
 }
 
-function formatMBps(bytesPerSecond) {
+function formatRate(bytesPerSecond) {
   if (bytesPerSecond === null || Number.isNaN(bytesPerSecond)) {
     return "计算中";
   }
-  return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
+  const mibps = bytesPerSecond / 1024 / 1024;
+  const mbps = (bytesPerSecond * 8) / 1000 / 1000;
+  return `${mibps.toFixed(2)} MiB/s（${mbps.toFixed(2)} Mbps）`;
 }
 
 function formatBytes(bytes) {
@@ -173,9 +175,9 @@ function networkLine(recording) {
     return "";
   }
   if (latestNetworkRate === null) {
-    return `<p class="meta live-traffic" data-live-traffic>服务器下行：计算中</p>`;
+    return `<p class="meta live-traffic" data-live-traffic>网卡下行：计算中</p>`;
   }
-  return `<p class="meta live-traffic" data-live-traffic>服务器下行：${formatMBps(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span></p>`;
+  return `<p class="meta live-traffic" data-live-traffic>网卡下行：${formatRate(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span></p>`;
 }
 
 function fileLine(recording) {
@@ -194,13 +196,13 @@ function renderFileMetric(id, sample) {
     node.textContent = "录制文件：尚未生成";
     return;
   }
-  const rateText = sample.rate === null ? "写入速度：计算中" : `写入速度：${formatMBps(sample.rate)}`;
+  const rateText = sample.rate === null ? "写入速度：计算中" : `写入速度：${formatRate(sample.rate)}`;
   node.textContent = `录制文件：${formatBytes(sample.size_bytes)}，${rateText}`;
 }
 
 function updateTrafficNodes() {
   document.querySelectorAll("[data-live-traffic]").forEach((node) => {
-    node.innerHTML = `服务器下行：${formatMBps(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span>`;
+    node.innerHTML = `网卡下行：${formatRate(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span>`;
   });
 }
 
