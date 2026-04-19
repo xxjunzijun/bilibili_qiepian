@@ -5,6 +5,7 @@ import os
 import signal
 import shlex
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -108,9 +109,18 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
     )
     if "{files}" not in settings.upload_command and len(files) > 1:
         command = f"{command} {' '.join(shlex.quote(file) for file in files[1:])}"
-    completed = subprocess.run(command, shell=True, capture_output=True, text=True)
-    output = (completed.stdout or "") + (completed.stderr or "")
-    return completed.returncode == 0, output.strip()
+    attempts = max(1, settings.upload_retry_attempts)
+    delay_seconds = max(0, settings.upload_retry_delay_seconds)
+    outputs: list[str] = []
+    for attempt in range(1, attempts + 1):
+        completed = subprocess.run(command, shell=True, capture_output=True, text=True)
+        output = ((completed.stdout or "") + (completed.stderr or "")).strip()
+        outputs.append(f"[qiepian] upload attempt {attempt}/{attempts}, exit code {completed.returncode}\n{output}")
+        if completed.returncode == 0:
+            return True, "\n\n".join(outputs)[-4000:]
+        if attempt < attempts and delay_seconds:
+            time.sleep(delay_seconds)
+    return False, "\n\n".join(outputs)[-4000:]
 
 
 def _recording_files(recording: dict) -> list[str]:

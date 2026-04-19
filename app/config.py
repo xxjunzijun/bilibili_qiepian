@@ -27,6 +27,8 @@ class Settings:
         "UPLOAD_COMMAND",
         'biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}',
     )
+    upload_retry_attempts: int = int(os.getenv("UPLOAD_RETRY_ATTEMPTS", "3"))
+    upload_retry_delay_seconds: int = int(os.getenv("UPLOAD_RETRY_DELAY_SECONDS", "60"))
 
     @property
     def database_path(self) -> Path:

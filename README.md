@@ -159,6 +159,8 @@ docker compose exec qiepian biliup --user-cookie /app/data/cookies.json upload \
 
 ```text
 UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}
+UPLOAD_RETRY_ATTEMPTS=3
+UPLOAD_RETRY_DELAY_SECONDS=60
 ```
 
 录制结束后，服务会自动替换这些变量：
@@ -174,6 +176,8 @@ UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --t
 ```
 
 如果暂时只想录制、不想自动投稿，可以把 `.env` 里的 `UPLOAD_COMMAND` 留空。
+
+如果 biliup 上传时遇到临时网络问题，比如 DNS 解析失败、连接失败，服务会按 `UPLOAD_RETRY_ATTEMPTS` 自动重试。重试间隔由 `UPLOAD_RETRY_DELAY_SECONDS` 控制。
 
 ### 4. 录制清晰度
 
