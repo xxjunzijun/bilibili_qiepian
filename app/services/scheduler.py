@@ -9,6 +9,7 @@ from app.config import settings
 from app.db import get_db
 from app.services.bilibili import fetch_live_status
 from app.services.commands import (
+    build_upload_log_path,
     build_recording_path,
     is_retryable_upload_error,
     remux_recording_to_mp4,
@@ -325,7 +326,12 @@ class RecorderScheduler:
                     if fresh:
                         row = dict(fresh)
             with get_db() as db:
-                db.execute("UPDATE recordings SET upload_status = 'uploading' WHERE id = ?", (row["id"],))
+                upload_log_path = row.get("upload_log_path") or build_upload_log_path(row)
+                db.execute(
+                    "UPDATE recordings SET upload_status = 'uploading', upload_log_path = ? WHERE id = ?",
+                    (upload_log_path, row["id"]),
+                )
+                row["upload_log_path"] = upload_log_path
             ok, output = upload_recording(row, row)
             with get_db() as db:
                 if ok:

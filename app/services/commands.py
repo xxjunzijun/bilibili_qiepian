@@ -121,23 +121,57 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
     )
     if "{files}" not in settings.upload_command and len(files) > 1:
         command = f"{command} {' '.join(shlex.quote(file) for file in files[1:])}"
+    upload_log_path = Path(recording.get("upload_log_path") or build_upload_log_path(recording))
+    upload_log_path.parent.mkdir(parents=True, exist_ok=True)
     attempts = max(1, settings.upload_retry_attempts)
     delay_seconds = max(0, settings.upload_retry_delay_seconds)
     outputs: list[str] = []
+    _append_upload_log(
+        upload_log_path,
+        [
+            "",
+            f"[qiepian] upload started at {datetime.now():%Y-%m-%d %H:%M:%S}",
+            f"[qiepian] command: {command}",
+            f"[qiepian] files: {', '.join(files)}",
+        ],
+    )
     for attempt in range(1, attempts + 1):
+        _append_upload_log(upload_log_path, [f"[qiepian] upload attempt {attempt}/{attempts} started"])
         completed = subprocess.run(command, shell=True, capture_output=True, text=True)
         output = ((completed.stdout or "") + (completed.stderr or "")).strip()
-        outputs.append(f"[qiepian] upload attempt {attempt}/{attempts}, exit code {completed.returncode}\n{output}")
+        attempt_output = f"[qiepian] upload attempt {attempt}/{attempts}, exit code {completed.returncode}\n{output}"
+        outputs.append(attempt_output)
+        _append_upload_log(upload_log_path, [attempt_output])
         if completed.returncode == 0:
+            _append_upload_log(upload_log_path, [f"[qiepian] upload succeeded at {datetime.now():%Y-%m-%d %H:%M:%S}"])
             return True, "\n\n".join(outputs)[-4000:]
         if attempt < attempts and delay_seconds:
+            _append_upload_log(upload_log_path, [f"[qiepian] retrying after {delay_seconds} seconds"])
             time.sleep(delay_seconds)
+    _append_upload_log(upload_log_path, [f"[qiepian] upload failed at {datetime.now():%Y-%m-%d %H:%M:%S}"])
     return False, "\n\n".join(outputs)[-4000:]
 
 
 def is_retryable_upload_error(output: str) -> bool:
     lowered = output.lower()
     return any(marker.lower() in lowered for marker in RETRYABLE_UPLOAD_MARKERS)
+
+
+def build_upload_log_path(recording: dict) -> str:
+    files = _recording_files(recording)
+    if files:
+        source_path = Path(files[0])
+    elif recording.get("file_path"):
+        source_path = Path(recording["file_path"])
+    else:
+        source_path = settings.recordings_dir / "upload"
+    return str(source_path.with_name(f"{source_path.stem}.upload.log"))
+
+
+def _append_upload_log(path: Path, lines: list[str]) -> None:
+    with path.open("a", encoding="utf-8") as log_file:
+        for line in lines:
+            log_file.write(f"{line}\n")
 
 
 def _recording_files(recording: dict) -> list[str]:

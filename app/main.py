@@ -133,7 +133,7 @@ def delete_recording(recording_id: int, delete_file: bool = True) -> dict:
 
         deleted_file = False
         if delete_file:
-            path_candidates = [recording.get("file_path"), recording.get("log_path")]
+            path_candidates = [recording.get("file_path"), recording.get("log_path"), recording.get("upload_log_path")]
             for json_field in ("segment_paths", "segment_log_paths", "mp4_paths"):
                 if recording.get(json_field):
                     try:

@@ -277,7 +277,8 @@ async function loadRecordings() {
           ${segmentText(r)}
           ${fileLine(r)}
           ${networkLine(r)}
-          ${r.log_path ? `<p class="meta">日志：${r.log_path}</p>` : ""}
+          ${r.log_path ? `<p class="meta">录制日志：${r.log_path}</p>` : ""}
+          ${r.upload_log_path ? `<p class="meta">投稿日志：${r.upload_log_path}</p>` : ""}
           <p class="meta">开始：${r.started_at} ${r.ended_at ? `结束：${r.ended_at}` : ""}</p>
           ${remuxText(r)}
           ${r.status_check_error ? `<p class="meta status-check-error">状态检查异常：${r.status_check_error}</p>` : ""}
