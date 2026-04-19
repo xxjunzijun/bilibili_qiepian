@@ -23,6 +23,7 @@ def read_network_rx_bytes() -> dict:
         return {
             "supported": False,
             "rx_bytes": 0,
+            "tx_bytes": 0,
             "timestamp": time.time(),
             "interface": None,
             "interfaces": [],
@@ -32,6 +33,7 @@ def read_network_rx_bytes() -> dict:
     configured_interface = settings.network_interface
     selected_interface = configured_interface or _default_route_interface()
     rx_bytes = 0
+    tx_bytes = 0
     interfaces = []
     found_selected = False
     for line in proc_net_dev.read_text(encoding="utf-8").splitlines()[2:]:
@@ -45,18 +47,22 @@ def read_network_rx_bytes() -> dict:
         if not fields:
             continue
         received = int(fields[0])
-        interfaces.append({"name": interface, "rx_bytes": received})
+        transmitted = int(fields[8]) if len(fields) > 8 else 0
+        interfaces.append({"name": interface, "rx_bytes": received, "tx_bytes": transmitted})
         if selected_interface:
             if interface == selected_interface:
                 rx_bytes = received
+                tx_bytes = transmitted
                 found_selected = True
         else:
             rx_bytes += received
+            tx_bytes += transmitted
 
     if selected_interface and not found_selected:
         return {
             "supported": False,
             "rx_bytes": 0,
+            "tx_bytes": 0,
             "timestamp": time.time(),
             "interface": selected_interface,
             "interfaces": interfaces,
@@ -66,6 +72,7 @@ def read_network_rx_bytes() -> dict:
     return {
         "supported": True,
         "rx_bytes": rx_bytes,
+        "tx_bytes": tx_bytes,
         "timestamp": time.time(),
         "interface": selected_interface,
         "interfaces": interfaces,

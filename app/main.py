@@ -203,27 +203,46 @@ def recording_file_metrics(recording_id: int) -> dict:
     if not row:
         raise HTTPException(status_code=404, detail="Recording not found")
     recording = dict(row)
-    file_path = recording.get("current_file_path") or recording.get("file_path")
-    if not file_path:
-        return {"exists": False, "size_bytes": 0, "path": None}
+    paths = _metric_file_paths(recording)
+    if not paths:
+        return {"exists": False, "size_bytes": 0, "path": None, "file_count": 0}
 
-    path = Path(file_path).resolve()
-    recordings_root = settings.recordings_dir.resolve()
-    try:
-        path.relative_to(recordings_root)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Refuse to stat file outside recordings directory") from exc
-
-    if not path.exists() or not path.is_file():
-        return {"exists": False, "size_bytes": 0, "path": str(path)}
-
-    stat = path.stat()
+    size_bytes = 0
+    existing_paths = []
+    missing_paths = []
+    for path_text in paths:
+        path = Path(path_text).resolve()
+        recordings_root = settings.recordings_dir.resolve()
+        try:
+            path.relative_to(recordings_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Refuse to stat file outside recordings directory") from exc
+        if path.exists() and path.is_file():
+            size_bytes += path.stat().st_size
+            existing_paths.append(str(path))
+        else:
+            missing_paths.append(str(path))
     return {
-        "exists": True,
-        "size_bytes": stat.st_size,
-        "mtime": stat.st_mtime,
-        "path": str(path),
+        "exists": bool(existing_paths),
+        "size_bytes": size_bytes,
+        "path": existing_paths[0] if existing_paths else missing_paths[0],
+        "paths": existing_paths,
+        "file_count": len(existing_paths),
     }
+
+
+def _metric_file_paths(recording: dict) -> list[str]:
+    if recording.get("upload_status") == "uploading":
+        for field in ("mp4_paths", "segment_paths"):
+            if recording.get(field):
+                try:
+                    paths = json.loads(recording[field])
+                    if isinstance(paths, list):
+                        return [str(path) for path in paths if path]
+                except json.JSONDecodeError:
+                    pass
+        return [recording["file_path"]] if recording.get("file_path") else []
+    return [recording.get("current_file_path") or recording.get("file_path")] if recording.get("current_file_path") or recording.get("file_path") else []
 
 
 @app.post("/api/recordings/{recording_id}/remux")

@@ -1,7 +1,8 @@
 const $ = (selector) => document.querySelector(selector);
 let refreshTimer = null;
 let networkTimer = null;
-let latestNetworkRate = null;
+let latestNetworkRxRate = null;
+let latestNetworkTxRate = null;
 let previousNetworkSample = null;
 let networkInterfaceName = "";
 const fileSamples = new Map();
@@ -171,20 +172,25 @@ function canRemux(recording) {
 }
 
 function networkLine(recording) {
-  if (recording.status !== "recording") {
+  if (!showsLiveMetrics(recording)) {
     return "";
   }
-  if (latestNetworkRate === null) {
-    return `<p class="meta live-traffic" data-live-traffic>网卡下行：计算中</p>`;
+  if (latestNetworkRxRate === null || latestNetworkTxRate === null) {
+    return `<p class="meta live-traffic" data-live-traffic>网卡流量：计算中</p>`;
   }
-  return `<p class="meta live-traffic" data-live-traffic>网卡下行：${formatRate(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span></p>`;
+  return `<p class="meta live-traffic" data-live-traffic>${networkTrafficText()}</p>`;
 }
 
 function fileLine(recording) {
-  if (recording.status !== "recording") {
+  if (!showsLiveMetrics(recording)) {
     return "";
   }
-  return `<p class="meta live-file" data-file-metric="${recording.id}">录制文件：计算中</p>`;
+  const label = recording.upload_status === "uploading" ? "上传文件" : "录制文件";
+  return `<p class="meta live-file" data-file-metric="${recording.id}" data-file-mode="${recording.upload_status === "uploading" ? "uploading" : "recording"}">${label}：计算中</p>`;
+}
+
+function showsLiveMetrics(recording) {
+  return recording.status === "recording" || recording.upload_status === "uploading";
 }
 
 function renderFileMetric(id, sample) {
@@ -193,7 +199,13 @@ function renderFileMetric(id, sample) {
     return;
   }
   if (!sample || !sample.exists) {
-    node.textContent = "录制文件：尚未生成";
+    const label = node.dataset.fileMode === "uploading" ? "上传文件" : "录制文件";
+    node.textContent = `${label}：尚未生成`;
+    return;
+  }
+  if (node.dataset.fileMode === "uploading") {
+    const countText = sample.file_count > 1 ? `，${sample.file_count} 个文件` : "";
+    node.textContent = `上传文件：${formatBytes(sample.size_bytes)}${countText}`;
     return;
   }
   const rateText = sample.rate === null ? "写入速度：计算中" : `写入速度：${formatRate(sample.rate)}`;
@@ -202,8 +214,12 @@ function renderFileMetric(id, sample) {
 
 function updateTrafficNodes() {
   document.querySelectorAll("[data-live-traffic]").forEach((node) => {
-    node.innerHTML = `网卡下行：${formatRate(latestNetworkRate)} <span>${networkInterfaceName || "默认网卡"}</span>`;
+    node.innerHTML = networkTrafficText();
   });
+}
+
+function networkTrafficText() {
+  return `网卡下行：${formatRate(latestNetworkRxRate)}，上行：${formatRate(latestNetworkTxRate)} <span>${networkInterfaceName || "默认网卡"}</span>`;
 }
 
 function setStatusMessage(id, message) {
@@ -308,16 +324,19 @@ async function updateNetworkRate() {
   try {
     const sample = await api("/api/metrics/network");
     if (!sample.supported) {
-      latestNetworkRate = null;
+      latestNetworkRxRate = null;
+      latestNetworkTxRate = null;
       networkInterfaceName = sample.interface ? `网卡 ${sample.interface} 不可用` : "不支持当前系统";
       updateTrafficNodes();
       return;
     }
     networkInterfaceName = sample.interface ? `网卡 ${sample.interface}` : "所有非 lo 网卡";
     if (previousNetworkSample) {
-      const byteDelta = sample.rx_bytes - previousNetworkSample.rx_bytes;
+      const rxByteDelta = sample.rx_bytes - previousNetworkSample.rx_bytes;
+      const txByteDelta = sample.tx_bytes - previousNetworkSample.tx_bytes;
       const timeDelta = sample.timestamp - previousNetworkSample.timestamp;
-      latestNetworkRate = timeDelta > 0 ? Math.max(0, byteDelta / timeDelta) : null;
+      latestNetworkRxRate = timeDelta > 0 ? Math.max(0, rxByteDelta / timeDelta) : null;
+      latestNetworkTxRate = timeDelta > 0 ? Math.max(0, txByteDelta / timeDelta) : null;
       updateTrafficNodes();
     }
     previousNetworkSample = sample;
