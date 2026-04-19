@@ -101,6 +101,19 @@ def update_streamer(streamer_id: int, payload: StreamerPatch) -> dict:
         return dict(row)
 
 
+@app.post("/api/streamers/{streamer_id}/enable-and-check")
+def enable_and_check_streamer(streamer_id: int) -> dict:
+    with get_db() as db:
+        row = db.execute("SELECT * FROM streamers WHERE id = ?", (streamer_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Streamer not found")
+        db.execute("UPDATE streamers SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (streamer_id,))
+    ok, message = scheduler.check_streamer_now(streamer_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {"ok": True, "message": message}
+
+
 @app.delete("/api/streamers/{streamer_id}")
 def delete_streamer(streamer_id: int) -> dict:
     with get_db() as db:

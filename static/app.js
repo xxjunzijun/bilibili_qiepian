@@ -213,6 +213,13 @@ function setStatusMessage(id, message) {
   }
 }
 
+function streamerToggleButton(streamer) {
+  if (streamer.enabled) {
+    return `<button class="secondary" onclick="toggleStreamer(${streamer.id}, false)">暂停</button>`;
+  }
+  return `<button class="secondary" onclick="enableAndCheckStreamer(${streamer.id})">启用并检查开播</button>`;
+}
+
 async function loadStreamers() {
   const streamers = await api("/api/streamers");
   $("#streamers").innerHTML =
@@ -230,7 +237,7 @@ async function loadStreamers() {
           <p class="meta" data-status-for="${s.id}"></p>
           <div class="actions">
             <button class="secondary" data-check-button="${s.id}" onclick="checkStatus(${s.id})">检查开播</button>
-            <button class="secondary" onclick="toggleStreamer(${s.id}, ${s.enabled ? "false" : "true"})">${s.enabled ? "暂停" : "启用"}</button>
+            ${streamerToggleButton(s)}
             <button class="danger" onclick="deleteStreamer(${s.id})">删除</button>
           </div>
         </article>
@@ -351,6 +358,12 @@ async function updateRecordingFileMetrics() {
 async function toggleStreamer(id, enabled) {
   await api(`/api/streamers/${id}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
   refresh();
+}
+
+async function enableAndCheckStreamer(id) {
+  setStatusMessage(id, "正在启用并检查开播...");
+  await api(`/api/streamers/${id}/enable-and-check`, { method: "POST" });
+  await refresh();
 }
 
 async function deleteStreamer(id) {

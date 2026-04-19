@@ -135,6 +135,17 @@ class RecorderScheduler:
                     (local_time_text(), next_upload_status, next_remux_status, active["id"]),
                 )
 
+    def check_streamer_now(self, streamer_id: int) -> tuple[bool, str]:
+        with get_db() as db:
+            row = db.execute("SELECT * FROM streamers WHERE id = ?", (streamer_id,)).fetchone()
+        if not row:
+            return False, "Streamer not found"
+        streamer = dict(row)
+        if not streamer["enabled"]:
+            return False, "Streamer is disabled"
+        self._check_streamer(streamer)
+        return True, "Streamer checked"
+
     def _sync_recording_processes(self) -> None:
         with get_db() as db:
             active = [
