@@ -127,6 +127,16 @@ function remuxText(recording) {
   return `<p class="meta">MP4：尚未生成</p>`;
 }
 
+function canManualUpload(recording) {
+  if (recording.status === "recording") {
+    return false;
+  }
+  if (["pending", "uploading", "uploaded"].includes(recording.upload_status)) {
+    return false;
+  }
+  return Boolean(recording.file_path || recording.segment_paths || recording.mp4_paths);
+}
+
 function networkLine(recording) {
   if (recording.status !== "recording") {
     return "";
@@ -222,7 +232,7 @@ async function loadRecordings() {
             ${r.status === "recording" ? `<button class="danger" onclick="stopRecording(${r.id})">中断并暂停主播</button>` : ""}
             ${r.status !== "recording" && r.remux_status !== "remuxed" ? `<button class="secondary" onclick="remuxRecording(${r.id})">生成 MP4 预览</button>` : ""}
             ${previewButtons(r)}
-            ${r.status === "finished" ? `<button class="secondary" onclick="queueUpload(${r.id})">加入投稿队列</button>` : ""}
+            ${canManualUpload(r) ? `<button class="secondary" onclick="queueUpload(${r.id})">手动投稿</button>` : ""}
             ${r.status !== "recording" ? `<button class="danger" onclick="deleteRecording(${r.id})">删除记录和文件</button>` : ""}
           </div>
         </article>

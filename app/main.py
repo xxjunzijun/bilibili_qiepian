@@ -258,9 +258,26 @@ def queue_upload(recording_id: int) -> dict:
         row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Recording not found")
-        if row["status"] != "finished":
-            raise HTTPException(status_code=400, detail="Recording is not finished")
-        db.execute("UPDATE recordings SET upload_status = 'pending', upload_error = NULL WHERE id = ?", (recording_id,))
+        recording = dict(row)
+        if recording["status"] == "recording":
+            raise HTTPException(status_code=400, detail="Recording is still running")
+        has_source = bool(recording.get("file_path") or recording.get("segment_paths") or recording.get("mp4_paths"))
+        if not has_source:
+            raise HTTPException(status_code=400, detail="Recording has no media file")
+        remux_status = recording.get("remux_status") or "not_started"
+        next_remux_status = remux_status if remux_status == "remuxed" else "pending"
+        db.execute(
+            """
+            UPDATE recordings
+            SET status = 'finished',
+                upload_status = 'pending',
+                upload_error = NULL,
+                remux_status = ?,
+                remux_error = NULL
+            WHERE id = ?
+            """,
+            (next_remux_status, recording_id),
+        )
     return {"ok": True}
 
 
