@@ -422,7 +422,7 @@ function renderUploadProgress(id, progress) {
   const percent = Number(progress.percent);
   if (progress.available && !Number.isNaN(percent)) {
     const safePercent = Math.min(100, Math.max(0, percent));
-    textNode.textContent = `${safePercent.toFixed(2)}% ${progress.message || ""}`.trim();
+    textNode.textContent = `${safePercent.toFixed(1)}% ${progress.message || ""}`.trim();
     barNode.style.width = `${safePercent}%`;
     barNode.classList.remove("indeterminate");
     return;

@@ -332,6 +332,12 @@ label {
   color: var(--muted);
   font-size: 14px;
   font-weight: 700;
+  line-height: 1.4;
+  flex-wrap: wrap;
+}
+
+.progress-head strong {
+  color: var(--ink);
 }
 
 .progress-track {

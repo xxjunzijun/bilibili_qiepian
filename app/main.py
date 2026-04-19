@@ -280,24 +280,29 @@ def _read_file_tail(path: Path, size: int) -> str:
 
 
 def _parse_upload_progress(text: str) -> tuple[int, int] | None:
-    matches = list(re.finditer(r"(?:[?&]|\\b)chunks=(\d+).*?(?:[?&]|\\b)(?:chunk|partNumber)=(\d+)", text))
-    matches += list(re.finditer(r"(?:[?&]|\\b)(?:chunk|partNumber)=(\d+).*?(?:[?&]|\\b)chunks=(\d+)", text))
-    if not matches:
+    candidates: list[tuple[int, int, int]] = []
+    for line_match in re.finditer(r"[^\n\r]*chunks=\d+[^\n\r]*", text):
+        line = line_match.group(0)
+        total_match = re.search(r"(?:[?&]|\b)chunks=(\d+)", line)
+        if not total_match:
+            continue
+        total = int(total_match.group(1))
+        part_match = re.search(r"(?:[?&]|\b)partNumber=(\d+)", line)
+        chunk_match = re.search(r"(?:[?&]|\b)chunk=(\d+)", line)
+        if part_match:
+            current = int(part_match.group(1))
+        elif chunk_match:
+            current = int(chunk_match.group(1)) + 1
+        else:
+            continue
+        candidates.append((line_match.start(), current, total))
+    if not candidates:
         return None
-    match = matches[-1]
-    first = int(match.group(1))
-    second = int(match.group(2))
-    if "chunks=" in match.group(0).split(str(first), 1)[0]:
-        total, current = first, second
-    else:
-        current, total = first, second
+    _, current, total = candidates[-1]
     if total <= 0:
         return None
     if current <= 0:
         current = 1
-    # biliup logs may include zero-based chunk plus one-based partNumber. Treat chunk as at least the current part.
-    if current < total and "chunk=" in match.group(0) and "partNumber=" not in match.group(0):
-        current += 1
     return min(current, total), total
 
 
