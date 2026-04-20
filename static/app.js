@@ -235,11 +235,93 @@ function setStatusMessage(id, message) {
   }
 }
 
+function selected(value, current) {
+  return String(value) === String(current) ? "selected" : "";
+}
+
+function checked(value) {
+  return Number(value) ? "checked" : "";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function streamerToggleButton(streamer) {
   if (streamer.enabled) {
     return `<button class="secondary" onclick="toggleStreamer(${streamer.id}, false)">暂停</button>`;
   }
   return `<button class="secondary" onclick="enableAndCheckStreamer(${streamer.id})">启用并检查开播</button>`;
+}
+
+function streamerEditForm(streamer) {
+  return `
+    <details class="advanced streamer-edit">
+      <summary>修改配置</summary>
+      <form class="streamer-edit-form" onsubmit="updateStreamerConfig(event, ${streamer.id})">
+        <div class="advanced-grid">
+          <label class="field">
+            <span>主播名称</span>
+            <input name="name" value="${escapeHtml(streamer.name)}" required />
+          </label>
+          <label class="field">
+            <span>直播间号</span>
+            <input name="room_id" value="${escapeHtml(streamer.room_id)}" required />
+          </label>
+          <label class="field">
+            <span>录制清晰度</span>
+            <select name="quality">
+              <option value="best" ${selected("best", streamer.quality || "best")}>最高可用 best</option>
+              <option value="1080p" ${selected("1080p", streamer.quality)}>1080p</option>
+              <option value="720p" ${selected("720p", streamer.quality)}>720p</option>
+              <option value="480p" ${selected("480p", streamer.quality)}>480p</option>
+              <option value="worst" ${selected("worst", streamer.quality)}>最低可用 worst</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>录制分段</span>
+            <select name="segment_hours">
+              <option value="0" ${selected(0, streamer.segment_hours || 0)}>不分段</option>
+              <option value="1" ${selected(1, streamer.segment_hours)}>每 1 小时一段</option>
+              <option value="2" ${selected(2, streamer.segment_hours)}>每 2 小时一段</option>
+              <option value="3" ${selected(3, streamer.segment_hours)}>每 3 小时一段</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>投稿分区 tid</span>
+            <input name="tid" type="number" value="${escapeHtml(streamer.tid || 171)}" />
+          </label>
+          <label class="field">
+            <span>投稿标签</span>
+            <input name="tags" value="${escapeHtml(streamer.tags)}" />
+          </label>
+          <label class="field full">
+            <span>标题模板</span>
+            <input name="title_template" value="${escapeHtml(streamer.title_template)}" />
+          </label>
+          <label class="field full">
+            <span>简介模板</span>
+            <textarea name="description_template">${escapeHtml(streamer.description_template)}</textarea>
+          </label>
+        </div>
+        <label class="check-row">
+          <input name="auto_upload" type="checkbox" ${checked(streamer.auto_upload)} />
+          <span>
+            <strong>下播后自动投稿</strong>
+            <small>关闭后只保留本地文件，可以之后手动投稿。</small>
+          </span>
+        </label>
+        <div class="form-actions">
+          <button type="submit">保存配置</button>
+          <p class="meta" data-edit-message="${streamer.id}"></p>
+        </div>
+      </form>
+    </details>
+  `;
 }
 
 function uploadOutputLine(recording) {
@@ -278,6 +360,7 @@ async function loadStreamers() {
             ${streamerToggleButton(s)}
             <button class="danger" onclick="deleteStreamer(${s.id})">删除</button>
           </div>
+          ${streamerEditForm(s)}
         </article>
       `,
       )
@@ -400,6 +483,33 @@ async function updateRecordingFileMetrics() {
 async function toggleStreamer(id, enabled) {
   await api(`/api/streamers/${id}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
   refresh();
+}
+
+async function updateStreamerConfig(event, id) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const payload = Object.fromEntries(data.entries());
+  payload.auto_upload = data.get("auto_upload") === "on";
+  payload.tid = Number(payload.tid || 171);
+  payload.segment_hours = Number(payload.segment_hours || 0);
+  payload.quality = payload.quality || "best";
+  const message = document.querySelector(`[data-edit-message="${id}"]`);
+  if (message) {
+    message.textContent = "正在保存...";
+  }
+  try {
+    await api(`/api/streamers/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    if (message) {
+      message.textContent = "已保存";
+    }
+    await refresh();
+  } catch (error) {
+    if (message) {
+      message.textContent = `保存失败：${error.message}`;
+    }
+    console.error(error);
+  }
 }
 
 async function enableAndCheckStreamer(id) {
