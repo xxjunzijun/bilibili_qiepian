@@ -49,6 +49,7 @@ class RecorderScheduler:
             self._stop.wait(settings.check_interval_seconds)
 
     def tick(self) -> None:
+        self._recover_stale_uploads()
         self._sync_recording_processes()
         with get_db() as db:
             streamers = [dict(row) for row in db.execute("SELECT * FROM streamers WHERE enabled = 1")]
@@ -57,6 +58,22 @@ class RecorderScheduler:
             self._check_streamer(streamer)
         self._check_finished_remux()
         self._check_finished_uploads()
+
+    def _recover_stale_uploads(self) -> None:
+        with get_db() as db:
+            db.execute(
+                """
+                UPDATE recordings
+                SET upload_status = 'pending',
+                    upload_error = CASE
+                        WHEN upload_error IS NULL OR upload_error = ''
+                        THEN 'Upload was interrupted, likely because the service restarted. Queued for retry.'
+                        ELSE upload_error || char(10) || 'Upload was interrupted, likely because the service restarted. Queued for retry.'
+                    END,
+                    next_upload_at = NULL
+                WHERE upload_status = 'uploading'
+                """
+            )
 
     def _check_streamer(self, streamer: dict) -> None:
         with get_db() as db:
