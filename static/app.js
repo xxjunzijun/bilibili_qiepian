@@ -6,7 +6,6 @@ let latestNetworkTxRate = null;
 let previousNetworkSample = null;
 let networkInterfaceName = "";
 const fileSamples = new Map();
-const uploadProgressSamples = new Map();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -183,26 +182,12 @@ function networkLine(recording) {
 }
 
 function fileLine(recording) {
-  if (!showsLiveMetrics(recording)) {
+  if (!recording.file_path && !recording.segment_paths && !recording.mp4_paths) {
     return "";
   }
-  const label = recording.upload_status === "uploading" ? "上传文件" : "录制文件";
-  return `<p class="meta live-file" data-file-metric="${recording.id}" data-file-mode="${recording.upload_status === "uploading" ? "uploading" : "recording"}">${label}：计算中</p>`;
-}
-
-function uploadProgressLine(recording) {
-  if (recording.upload_status !== "uploading") {
-    return "";
-  }
-  return `
-    <div class="upload-progress" data-upload-progress="${recording.id}">
-      <div class="progress-head">
-        <span>上传进度</span>
-        <strong data-upload-progress-text>等待进度</strong>
-      </div>
-      <div class="progress-track"><div class="progress-bar" data-upload-progress-bar style="width: 0%"></div></div>
-    </div>
-  `;
+  const mode = recording.upload_status === "uploading" ? "uploading" : recording.status === "recording" ? "recording" : "static";
+  const label = mode === "uploading" ? "上传文件" : mode === "recording" ? "录制文件" : "本地文件";
+  return `<p class="meta live-file" data-file-metric="${recording.id}" data-file-mode="${mode}">${label}：计算中</p>`;
 }
 
 function showsLiveMetrics(recording) {
@@ -222,6 +207,11 @@ function renderFileMetric(id, sample) {
   if (node.dataset.fileMode === "uploading") {
     const countText = sample.file_count > 1 ? `，${sample.file_count} 个文件` : "";
     node.textContent = `上传文件：${formatBytes(sample.size_bytes)}${countText}`;
+    return;
+  }
+  if (node.dataset.fileMode === "static") {
+    const countText = sample.file_count > 1 ? `，${sample.file_count} 个文件` : "";
+    node.textContent = `本地文件：${formatBytes(sample.size_bytes)}${countText}`;
     return;
   }
   const rateText = sample.rate === null ? "写入速度：计算中" : `写入速度：${formatRate(sample.rate)}`;
@@ -250,6 +240,22 @@ function streamerToggleButton(streamer) {
     return `<button class="secondary" onclick="toggleStreamer(${streamer.id}, false)">暂停</button>`;
   }
   return `<button class="secondary" onclick="enableAndCheckStreamer(${streamer.id})">启用并检查开播</button>`;
+}
+
+function uploadOutputLine(recording) {
+  if (recording.upload_status === "uploaded") {
+    return `<p class="meta upload-summary">投稿结果：已发布，详细输出见投稿日志</p>`;
+  }
+  if (!recording.upload_error) {
+    return "";
+  }
+  const summary = recording.upload_status === "failed" ? "发布失败，展开查看输出" : "发布提示，展开查看输出";
+  return `
+    <details class="log-details">
+      <summary>${summary}</summary>
+      <pre>${recording.upload_error}</pre>
+    </details>
+  `;
 }
 
 async function loadStreamers() {
@@ -292,7 +298,6 @@ async function loadRecordings() {
           <p class="meta">${r.file_path || "未生成文件"}</p>
           ${segmentText(r)}
           ${fileLine(r)}
-          ${uploadProgressLine(r)}
           ${networkLine(r)}
           ${r.log_path ? `<p class="meta">录制日志：${r.log_path}</p>` : ""}
           ${r.upload_log_path ? `<p class="meta">投稿日志：${r.upload_log_path}</p>` : ""}
@@ -301,7 +306,7 @@ async function loadRecordings() {
           ${r.status_check_error ? `<p class="meta status-check-error">状态检查异常：${r.status_check_error}</p>` : ""}
           ${r.error ? `<p class="meta">录制错误：${r.error}</p>` : ""}
           ${r.remux_error ? `<p class="meta">MP4 封装输出：${r.remux_error}</p>` : ""}
-          ${r.upload_error ? `<p class="meta">发布输出：${r.upload_error}</p>` : ""}
+          ${uploadOutputLine(r)}
           <div class="actions">
             ${r.status === "recording" ? `<button class="danger" onclick="stopRecording(${r.id})">中断并暂停主播</button>` : ""}
             ${r.status !== "recording" ? remuxQualitySelect(r) : ""}
@@ -335,7 +340,7 @@ function startRefreshLoop() {
 }
 
 async function updateLiveMetrics() {
-  await Promise.all([updateNetworkRate(), updateRecordingFileMetrics(), updateUploadProgressMetrics()]);
+  await Promise.all([updateNetworkRate(), updateRecordingFileMetrics()]);
 }
 
 async function updateNetworkRate() {
@@ -390,46 +395,6 @@ async function updateRecordingFileMetrics() {
       }
     }),
   );
-}
-
-async function updateUploadProgressMetrics() {
-  const nodes = [...document.querySelectorAll("[data-upload-progress]")];
-  await Promise.all(
-    nodes.map(async (node) => {
-      const id = node.getAttribute("data-upload-progress");
-      if (!id) {
-        return;
-      }
-      try {
-        const progress = await api(`/api/recordings/${id}/upload-progress`);
-        uploadProgressSamples.set(id, progress);
-        renderUploadProgress(id, progress);
-      } catch (error) {
-        renderUploadProgress(id, { available: false, percent: null, message: "读取进度失败" });
-        console.error(error);
-      }
-    }),
-  );
-}
-
-function renderUploadProgress(id, progress) {
-  const node = document.querySelector(`[data-upload-progress="${id}"]`);
-  if (!node) {
-    return;
-  }
-  const textNode = node.querySelector("[data-upload-progress-text]");
-  const barNode = node.querySelector("[data-upload-progress-bar]");
-  const percent = Number(progress.percent);
-  if (progress.available && !Number.isNaN(percent)) {
-    const safePercent = Math.min(100, Math.max(0, percent));
-    textNode.textContent = `${safePercent.toFixed(1)}% ${progress.message || ""}`.trim();
-    barNode.style.width = `${safePercent}%`;
-    barNode.classList.remove("indeterminate");
-    return;
-  }
-  textNode.textContent = progress.message || "等待进度";
-  barNode.style.width = "38%";
-  barNode.classList.add("indeterminate");
 }
 
 async function toggleStreamer(id, enabled) {

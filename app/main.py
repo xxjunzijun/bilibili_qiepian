@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -232,81 +231,9 @@ def recording_file_metrics(recording_id: int) -> dict:
     }
 
 
-@app.get("/api/recordings/{recording_id}/upload-progress")
-def upload_progress(recording_id: int) -> dict:
-    with get_db() as db:
-        row = db.execute("SELECT * FROM recordings WHERE id = ?", (recording_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Recording not found")
-    recording = dict(row)
-    if recording.get("upload_status") == "uploaded":
-        return {"available": True, "percent": 100, "current": None, "total": None, "message": "上传完成"}
-    log_path_text = recording.get("upload_log_path")
-    if not log_path_text:
-        return {"available": False, "percent": None, "current": None, "total": None, "message": "等待投稿日志"}
-
-    log_path = Path(log_path_text).resolve()
-    recordings_root = settings.recordings_dir.resolve()
-    try:
-        log_path.relative_to(recordings_root)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Refuse to read log outside recordings directory") from exc
-    if not log_path.exists() or not log_path.is_file():
-        return {"available": False, "percent": None, "current": None, "total": None, "message": "等待投稿日志"}
-
-    text = _read_file_tail(log_path, 262144)
-    progress = _parse_upload_progress(text)
-    if progress:
-        current, total = progress
-        percent = round(min(100, max(0, current / total * 100)), 2) if total else None
-        return {
-            "available": True,
-            "percent": percent,
-            "current": current,
-            "total": total,
-            "message": f"分片 {current}/{total}",
-        }
-    if recording.get("upload_status") == "uploading":
-        return {"available": False, "percent": None, "current": None, "total": None, "message": "上传中，等待分片进度"}
-    return {"available": False, "percent": None, "current": None, "total": None, "message": "暂无上传进度"}
-
-
-def _read_file_tail(path: Path, size: int) -> str:
-    with path.open("rb") as file:
-        file.seek(0, 2)
-        length = file.tell()
-        file.seek(max(0, length - size))
-        return file.read().decode("utf-8", errors="ignore")
-
-
-def _parse_upload_progress(text: str) -> tuple[int, int] | None:
-    candidates: list[tuple[int, int, int]] = []
-    for line_match in re.finditer(r"[^\n\r]*chunks=\d+[^\n\r]*", text):
-        line = line_match.group(0)
-        total_match = re.search(r"(?:[?&]|\b)chunks=(\d+)", line)
-        if not total_match:
-            continue
-        total = int(total_match.group(1))
-        part_match = re.search(r"(?:[?&]|\b)partNumber=(\d+)", line)
-        chunk_match = re.search(r"(?:[?&]|\b)chunk=(\d+)", line)
-        if part_match:
-            current = int(part_match.group(1))
-        elif chunk_match:
-            current = int(chunk_match.group(1)) + 1
-        else:
-            continue
-        candidates.append((line_match.start(), current, total))
-    if not candidates:
-        return None
-    _, current, total = candidates[-1]
-    if total <= 0:
-        return None
-    if current <= 0:
-        current = 1
-    return min(current, total), total
-
-
 def _metric_file_paths(recording: dict) -> list[str]:
+    if recording.get("status") == "recording":
+        return [recording.get("current_file_path") or recording.get("file_path")] if recording.get("current_file_path") or recording.get("file_path") else []
     if recording.get("upload_status") == "uploading":
         for field in ("mp4_paths", "segment_paths"):
             if recording.get(field):
@@ -317,7 +244,15 @@ def _metric_file_paths(recording: dict) -> list[str]:
                 except json.JSONDecodeError:
                     pass
         return [recording["file_path"]] if recording.get("file_path") else []
-    return [recording.get("current_file_path") or recording.get("file_path")] if recording.get("current_file_path") or recording.get("file_path") else []
+    for field in ("mp4_paths", "segment_paths"):
+        if recording.get(field):
+            try:
+                paths = json.loads(recording[field])
+                if isinstance(paths, list):
+                    return [str(path) for path in paths if path]
+            except json.JSONDecodeError:
+                pass
+    return [recording["file_path"]] if recording.get("file_path") else []
 
 
 @app.post("/api/recordings/{recording_id}/remux")
