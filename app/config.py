@@ -25,7 +25,7 @@ class Settings:
     video_audio_bitrate: str = os.getenv("VIDEO_AUDIO_BITRATE", "128k").strip()
     upload_command: str = os.getenv(
         "UPLOAD_COMMAND",
-        'biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}',
+        'biliup --user-cookie ./data/cookies.json upload --copyright 2 --source "{source}" --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}',
     )
     upload_retry_attempts: int = int(os.getenv("UPLOAD_RETRY_ATTEMPTS", "3"))
     upload_retry_delay_seconds: int = int(os.getenv("UPLOAD_RETRY_DELAY_SECONDS", "60"))

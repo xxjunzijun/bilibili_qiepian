@@ -144,6 +144,7 @@ mkdir -p recordings
 ```bash
 docker compose exec qiepian biliup --user-cookie /app/data/cookies.json upload \
   --copyright 2 \
+  --source "https://live.bilibili.com/1" \
   --tid 171 \
   --tag "测试" \
   --title "自动投稿测试" \
@@ -158,7 +159,7 @@ docker compose exec qiepian biliup --user-cookie /app/data/cookies.json upload \
 `.env` 里默认的投稿命令是：
 
 ```text
-UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}
+UPLOAD_COMMAND=biliup --user-cookie ./data/cookies.json upload --copyright 2 --source "{source}" --tid {tid} --tag "{tags}" --title "{title}" --desc "{description}" {files}
 UPLOAD_RETRY_ATTEMPTS=3
 UPLOAD_RETRY_DELAY_SECONDS=60
 UPLOAD_DEFERRED_RETRY_ATTEMPTS=12
@@ -178,6 +179,8 @@ UPLOAD_DEFERRED_RETRY_DELAY_SECONDS=600
 ```
 
 如果暂时只想录制、不想自动投稿，可以把 `.env` 里的 `UPLOAD_COMMAND` 留空。
+
+默认命令使用 `--copyright 2`，也就是转载投稿。B站要求转载稿必须填写来源，所以命令里需要保留 `--source "{source}"`。如果你把投稿类型改成自制 `--copyright 1`，可以不填 `--source`。
 
 如果 biliup 上传时遇到临时网络问题，比如 DNS 解析失败、连接失败，服务会先按 `UPLOAD_RETRY_ATTEMPTS` 连续重试。连续重试仍失败时，如果错误属于 DNS 或连接类临时错误，任务会重新回到“等待投稿”，并按 `UPLOAD_DEFERRED_RETRY_DELAY_SECONDS` 延后再次尝试。最多延后重试 `UPLOAD_DEFERRED_RETRY_ATTEMPTS` 轮。
 

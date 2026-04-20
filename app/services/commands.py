@@ -121,6 +121,7 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
     )
     if "{files}" not in settings.upload_command and len(files) > 1:
         command = f"{command} {' '.join(shlex.quote(file) for file in files[1:])}"
+    command = _ensure_reprint_source(command, streamer["url"])
     upload_log_path = Path(recording.get("upload_log_path") or build_upload_log_path(recording))
     upload_log_path.parent.mkdir(parents=True, exist_ok=True)
     attempts = max(1, settings.upload_retry_attempts)
@@ -155,6 +156,19 @@ def upload_recording(streamer: dict, recording: dict) -> tuple[bool, str]:
 def is_retryable_upload_error(output: str) -> bool:
     lowered = output.lower()
     return any(marker.lower() in lowered for marker in RETRYABLE_UPLOAD_MARKERS)
+
+
+def _ensure_reprint_source(command: str, source: str) -> str:
+    parts = shlex.split(command)
+    if "--copyright" not in parts:
+        return command
+    copyright_index = parts.index("--copyright")
+    copyright_value = parts[copyright_index + 1] if copyright_index + 1 < len(parts) else ""
+    if copyright_value != "2" or "--source" in parts:
+        return command
+    insert_at = min(copyright_index + 2, len(parts))
+    parts[insert_at:insert_at] = ["--source", source]
+    return shlex.join(parts)
 
 
 def build_upload_log_path(recording: dict) -> str:
