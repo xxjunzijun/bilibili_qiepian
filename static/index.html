@@ -94,9 +94,15 @@
                 <summary>投稿设置</summary>
                 <div class="advanced-grid">
                   <label class="field">
-                    <span>投稿分区 tid</span>
-                    <small>B站投稿分区 ID。默认 171。</small>
-                    <input name="tid" type="number" value="171" />
+                    <span>投稿分区</span>
+                    <small>选择常用分区，找不到时选自定义并填写 tid。</small>
+                    <select data-category-select data-tid-input="streamer-tid" onchange="syncTidPreset(this)"></select>
+                  </label>
+
+                  <label class="field">
+                    <span>自定义 tid</span>
+                    <small>会传给 biliup 的 --tid。默认 171。</small>
+                    <input id="streamer-tid" name="tid" type="number" min="1" value="171" onchange="syncTidInput(this)" />
                   </label>
 
                   <label class="field">

@@ -6,6 +6,34 @@ let latestNetworkTxRate = null;
 let previousNetworkSample = null;
 let networkInterfaceName = "";
 const fileSamples = new Map();
+const uploadCategories = [
+  { tid: 171, name: "电子竞技" },
+  { tid: 172, name: "手机游戏" },
+  { tid: 17, name: "单机游戏" },
+  { tid: 65, name: "网络游戏" },
+  { tid: 21, name: "日常" },
+  { tid: 138, name: "搞笑" },
+  { tid: 161, name: "手工" },
+  { tid: 162, name: "绘画" },
+  { tid: 122, name: "野生技能协会" },
+  { tid: 201, name: "科学科普" },
+  { tid: 124, name: "社科·法律·心理" },
+  { tid: 228, name: "人文历史" },
+  { tid: 207, name: "财经商业" },
+  { tid: 208, name: "校园学习" },
+  { tid: 209, name: "职业职场" },
+  { tid: 28, name: "原创音乐" },
+  { tid: 31, name: "翻唱" },
+  { tid: 59, name: "演奏" },
+  { tid: 20, name: "宅舞" },
+  { tid: 154, name: "舞蹈综合" },
+  { tid: 182, name: "影视杂谈" },
+  { tid: 183, name: "影视剪辑" },
+  { tid: 85, name: "短片" },
+  { tid: 95, name: "数码" },
+  { tid: 230, name: "软件应用" },
+  { tid: 231, name: "计算机技术" },
+];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -243,6 +271,59 @@ function checked(value) {
   return Number(value) ? "checked" : "";
 }
 
+function categoryLabel(tid) {
+  const category = uploadCategories.find((item) => Number(item.tid) === Number(tid));
+  return category ? `${category.name} (${category.tid})` : `自定义分区 (${tid || 171})`;
+}
+
+function categorySelect(tid, inputId) {
+  const currentTid = Number(tid || 171);
+  const hasPreset = uploadCategories.some((item) => item.tid === currentTid);
+  const options = uploadCategories
+    .map((item) => `<option value="${item.tid}" ${selected(item.tid, currentTid)}>${item.name} (${item.tid})</option>`)
+    .join("");
+  return `
+    <select data-category-select data-tid-input="${inputId}" onchange="syncTidPreset(this)">
+      ${options}
+      <option value="custom" ${hasPreset ? "" : "selected"}>自定义分区</option>
+    </select>
+  `;
+}
+
+function setupCategorySelects(root = document) {
+  root.querySelectorAll("[data-category-select]").forEach((select) => {
+    if (select.options.length) {
+      return;
+    }
+    const input = document.getElementById(select.dataset.tidInput);
+    const currentTid = Number(input?.value || select.dataset.currentTid || 171);
+    const hasPreset = uploadCategories.some((item) => item.tid === currentTid);
+    select.innerHTML = `${uploadCategories
+      .map((item) => `<option value="${item.tid}" ${selected(item.tid, currentTid)}>${item.name} (${item.tid})</option>`)
+      .join("")}<option value="custom" ${hasPreset ? "" : "selected"}>自定义分区</option>`;
+  });
+}
+
+function syncTidPreset(select) {
+  const input = document.getElementById(select.dataset.tidInput);
+  if (!input) {
+    return;
+  }
+  input.readOnly = select.value !== "custom";
+  if (select.value !== "custom") {
+    input.value = select.value;
+  }
+}
+
+function syncTidInput(input) {
+  const select = document.querySelector(`[data-category-select][data-tid-input="${input.id}"]`);
+  if (!select) {
+    return;
+  }
+  select.value = uploadCategories.some((item) => item.tid === Number(input.value)) ? String(input.value) : "custom";
+  syncTidPreset(select);
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -259,6 +340,8 @@ function streamerToggleButton(streamer) {
 }
 
 function streamerEditForm(streamer) {
+  const tidInputId = `streamer-tid-${streamer.id}`;
+  const tidIsPreset = uploadCategories.some((item) => item.tid === Number(streamer.tid || 171));
   return `
     <details class="advanced streamer-edit">
       <summary>修改配置</summary>
@@ -292,8 +375,12 @@ function streamerEditForm(streamer) {
             </select>
           </label>
           <label class="field">
-            <span>投稿分区 tid</span>
-            <input name="tid" type="number" value="${escapeHtml(streamer.tid || 171)}" />
+            <span>投稿分区</span>
+            ${categorySelect(streamer.tid, tidInputId)}
+          </label>
+          <label class="field">
+            <span>自定义 tid</span>
+            <input id="${tidInputId}" name="tid" type="number" min="1" value="${escapeHtml(streamer.tid || 171)}" onchange="syncTidInput(this)" ${tidIsPreset ? "readonly" : ""} />
           </label>
           <label class="field">
             <span>投稿标签</span>
@@ -351,6 +438,7 @@ async function loadStreamers() {
           <div>${statusBadge(s.enabled ? "enabled" : "disabled")} ${statusBadge(s.auto_upload ? "auto_upload" : "manual_upload")}</div>
           <p class="meta">房间号：${s.room_id}</p>
           <p class="meta">清晰度：${s.quality || "best"}</p>
+          <p class="meta">投稿分区：${categoryLabel(s.tid)}</p>
           <p class="meta">分段：${Number(s.segment_hours || 0) ? `每 ${s.segment_hours} 小时` : "不分段"}</p>
           <p class="meta">标签：${s.tags}</p>
           <p class="meta">标题：${s.title_template}</p>
@@ -614,6 +702,8 @@ $("#streamer-form").addEventListener("submit", async (event) => {
 });
 
 $("#refresh").addEventListener("click", refresh);
+setupCategorySelects();
+document.querySelectorAll("[data-category-select]").forEach(syncTidPreset);
 
 async function boot() {
   await refresh();
