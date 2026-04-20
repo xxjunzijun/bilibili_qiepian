@@ -11,7 +11,7 @@ class StreamerIn(BaseModel):
     segment_hours: int = 0
     enabled: bool = True
     auto_upload: bool = True
-    tid: int = 171
+    tid: int = Field(default=171, gt=0)
     tags: str = "直播录像,B站录播"
     title_template: str = "{streamer} 直播录像 {date}"
     description_template: str = "自动录制的直播录像\n主播：{streamer}\n直播间：{url}"
@@ -25,7 +25,7 @@ class StreamerPatch(BaseModel):
     segment_hours: int | None = None
     enabled: bool | None = None
     auto_upload: bool | None = None
-    tid: int | None = None
+    tid: int | None = Field(default=None, gt=0)
     tags: str | None = None
     title_template: str | None = None
     description_template: str | None = None
